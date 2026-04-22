@@ -24,3 +24,6 @@ build/
 # Arquivos temporários
 *.tmp
 *.temp
+
+// Chave do Firebase (NÃO COMMITAR)
+firebase-key.json
