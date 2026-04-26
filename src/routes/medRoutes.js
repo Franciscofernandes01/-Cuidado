@@ -1,20 +1,18 @@
 const router = require("express").Router()
 const auth = require("../middlewares/auth")
 const checkRole = require("../middlewares/permissao")
-const Medicamento = require("../models/Medicamentos")
-
+const { db } = require("../config/firebase")
 /**
  * @swagger
  * tags:
  *   name: Medicamentos
- *   description: Gerenciamento de medicamentos (requer autenticação)
+ *   description: Gerenciamento de medicamentos (paciente e familiar)
  */
-
- /**
+/**
  * @swagger
  * /medicamentos:
  *   post:
- *     summary: Cria um novo medicamento para o paciente (ou via familiar vinculado)
+ *     summary: Criar medicamento (somente familiar vinculado)
  *     tags: [Medicamentos]
  *     security:
  *       - bearerAuth: []
@@ -37,47 +35,21 @@ const Medicamento = require("../models/Medicamentos")
  *                 example: 500mg
  *               frequencia:
  *                 type: string
- *                 example: 8 em 8 horas
+ *                 example: 8/8h
  *     responses:
  *       201:
  *         description: Medicamento criado com sucesso
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 _id:
- *                   type: string
- *                 nome:
- *                   type: string
- *                 dosagem:
- *                   type: string
- *                 frequencia:
- *                   type: string
- *                 userId:
- *                   type: string
  *       400:
- *         description: Erro de validação ou familiar não vinculado a paciente
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 erro:
- *                   type: string
- *                   example: Preencha todos os campos
+ *         description: Erro de validação ou familiar sem vínculo
+ *       404:
+ *         description: Usuário não encontrado
  *       500:
- *         description: Erro ao cadastrar medicamento
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 erro:
- *                   type: string
- *                   example: Erro ao cadastrar medicamento
+ *         description: Erro interno
  */
-router.post("/", auth, async (req, res) => {
+// =======================
+// CRIAR MEDICAMENTO
+// =======================
+router.post("/", auth, checkRole(["familiar"]), async (req, res) => {
   try {
     const { nome, dosagem, frequencia } = req.body
 
@@ -85,45 +57,52 @@ router.post("/", auth, async (req, res) => {
       return res.status(400).json({ erro: "Preencha todos os campos" })
     }
 
-    const user = await User.findById(req.userId)
+    const userDoc = await db.collection("usuarios").doc(req.user.uid).get()
 
-    let pacienteId
-
-    if (user.tipo === "paciente") {
-      pacienteId = user._id
-    } else if (user.tipo === "familiar") {
-      if (!user.pacienteId) {
-        return res.status(400).json({ erro: "Familiar não vinculado a paciente" })
-      }
-      pacienteId = user.pacienteId
+    if (!userDoc.exists) {
+      return res.status(404).json({ erro: "Usuário não encontrado" })
     }
 
-    const med = await Medicamento.create({
+    const user = userDoc.data()
+
+    if (!user.pacienteId) {
+      return res.status(400).json({ erro: "Familiar não vinculado a paciente" })
+    }
+
+    const doc = await db.collection("medicamentos").add({
       nome,
       dosagem,
       frequencia,
-      userId: pacienteId // pertence ao paciente
+      pacienteId: user.pacienteId,
+      criadoPor: req.user.uid,
+      tomado: false,
+      createdAt: new Date()
     })
 
-    res.status(201).json(med)
-    console.log(`Usuário ${req.userId} criou o medicamento ${med.nome}`)
+    return res.status(201).json({
+      id: doc.id,
+      nome,
+      dosagem,
+      frequencia
+    })
+
   } catch (err) {
-    res.status(500).json({ erro: "Erro ao cadastrar medicamento" })
+    console.log(err)
+    return res.status(500).json({ erro: "Erro ao cadastrar medicamento" })
   }
-  
 })
 
- /**
+/**
  * @swagger
  * /medicamentos/status:
  *   get:
- *     summary: Retorna medicamentos tomados e pendentes do paciente
+ *     summary: Listar medicamentos (tomados e pendentes)
  *     tags: [Medicamentos]
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Lista de medicamentos separados por status
+ *         description: Lista de medicamentos separada por status
  *         content:
  *           application/json:
  *             schema:
@@ -131,66 +110,57 @@ router.post("/", auth, async (req, res) => {
  *               properties:
  *                 tomados:
  *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       _id:
- *                         type: string
- *                       nome:
- *                         type: string
- *                       dosagem:
- *                         type: string
- *                       frequencia:
- *                         type: string
- *                       tomado:
- *                         type: boolean
  *                 pendentes:
  *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       _id:
- *                         type: string
- *                       nome:
- *                         type: string
- *                       dosagem:
- *                         type: string
- *                       frequencia:
- *                         type: string
- *                       tomado:
- *                         type: boolean
+ *       400:
+ *         description: Paciente não definido
+ *       404:
+ *         description: Usuário não encontrado
  *       500:
- *         description: Erro ao buscar medicamentos
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 erro:
- *                   type: string
- *                   example: Erro ao buscar medicamentos
+ *         description: Erro interno
  */
+// =======================
+// LISTAR MEDICAMENTOS
+// =======================
 router.get("/status", auth, async (req, res) => {
   try {
-    const user = await User.findById(req.userId)
+    const userDoc = await db.collection("usuarios").doc(req.user.uid).get()
+
+    if (!userDoc.exists) {
+      return res.status(404).json({ erro: "Usuário não encontrado" })
+    }
+
+    const user = userDoc.data()
 
     const pacienteId =
-      user.tipo === "paciente" ? user._id : user.pacienteId
+      user.tipo === "paciente"
+        ? req.user.uid
+        : user.pacienteId
 
-    const tomados = await Medicamento.find({
-      userId: pacienteId,
-      tomado: true
+    if (!pacienteId) {
+      return res.status(400).json({ erro: "Paciente não definido" })
+    }
+
+    const snapshot = await db
+      .collection("medicamentos")
+      .where("pacienteId", "==", pacienteId)
+      .get()
+
+    const tomados = []
+    const pendentes = []
+
+    snapshot.forEach(doc => {
+      const data = { id: doc.id, ...doc.data() }
+
+      if (data.tomado) tomados.push(data)
+      else pendentes.push(data)
     })
 
-    const pendentes = await Medicamento.find({
-      userId: pacienteId,
-      tomado: false
-    })
-
-    res.json({ tomados, pendentes })
+    return res.json({ tomados, pendentes })
 
   } catch (err) {
-    res.status(500).json({ erro: "Erro ao buscar medicamentos" })
+    console.log(err)
+    return res.status(500).json({ erro: "Erro ao buscar medicamentos" })
   }
 })
 
@@ -198,7 +168,7 @@ router.get("/status", auth, async (req, res) => {
  * @swagger
  * /medicamentos/{id}:
  *   put:
- *     summary: Atualizar um medicamento
+ *     summary: Atualizar medicamento (somente familiar do paciente)
  *     tags: [Medicamentos]
  *     security:
  *       - bearerAuth: []
@@ -206,34 +176,56 @@ router.get("/status", auth, async (req, res) => {
  *       - in: path
  *         name: id
  *         required: true
- *         description: ID do medicamento
  *         schema:
  *           type: string
+ *         description: ID do medicamento
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
- *           example:
- *             nome: "Paracetamol"
- *             quantidade: 15
- *             horario: "10:00"
+ *           schema:
+ *             type: object
  *     responses:
  *       200:
- *         description: Medicamento atualizado
+ *         description: Atualizado com sucesso
+ *       403:
+ *         description: Sem permissão
  *       404:
  *         description: Medicamento não encontrado
  */
-router.put("/:id", auth, async (req, res) => {
-  const med = await Medicamento.findByIdAndUpdate(req.params.id, req.body, { new: true })
-  res.json(med)
-  console.log(`Usuário ${req.userId} atualizou o medicamento ${med.nome}`)
+// =======================
+// ATUALIZAR
+// =======================
+router.put("/:id", auth, checkRole(["familiar"]), async (req, res) => {
+  try {
+    const userDoc = await db.collection("usuarios").doc(req.user.uid).get()
+    const user = userDoc.data()
+
+    const ref = db.collection("medicamentos").doc(req.params.id)
+    const doc = await ref.get()
+
+    if (!doc.exists) {
+      return res.status(404).json({ erro: "Medicamento não encontrado" })
+    }
+
+    if (doc.data().pacienteId !== user.pacienteId) {
+      return res.status(403).json({ erro: "Sem permissão" })
+    }
+
+    await ref.update(req.body)
+
+    return res.json({ mensagem: "Atualizado com sucesso" })
+
+  } catch (err) {
+    return res.status(500).json({ erro: "Erro ao atualizar" })
+  }
 })
 
 /**
  * @swagger
  * /medicamentos/{id}:
  *   delete:
- *     summary: Deletar um medicamento
+ *     summary: Deletar medicamento (somente familiar do paciente)
  *     tags: [Medicamentos]
  *     security:
  *       - bearerAuth: []
@@ -241,26 +233,50 @@ router.put("/:id", auth, async (req, res) => {
  *       - in: path
  *         name: id
  *         required: true
- *         description: ID do medicamento
  *         schema:
  *           type: string
+ *         description: ID do medicamento
  *     responses:
  *       200:
- *         description: Medicamento deletado
+ *         description: Deletado com sucesso
+ *       403:
+ *         description: Sem permissão
  *       404:
  *         description: Medicamento não encontrado
  */
-router.delete("/:id", auth, async (req, res) => {
-  await Medicamento.findByIdAndDelete(req.params.id)
-  res.json("Deletado")
-  console.log(`Usuário ${req.userId} deletou o medicamento ${req.params.id}`)
+// =======================
+// DELETAR
+// =======================
+router.delete("/:id", auth, checkRole(["familiar"]), async (req, res) => {
+  try {
+    const userDoc = await db.collection("usuarios").doc(req.user.uid).get()
+    const user = userDoc.data()
+
+    const ref = db.collection("medicamentos").doc(req.params.id)
+    const doc = await ref.get()
+
+    if (!doc.exists) {
+      return res.status(404).json({ erro: "Medicamento não encontrado" })
+    }
+
+    if (doc.data().pacienteId !== user.pacienteId) {
+      return res.status(403).json({ erro: "Sem permissão" })
+    }
+
+    await ref.delete()
+
+    return res.json({ mensagem: "Deletado com sucesso" })
+
+  } catch (err) {
+    return res.status(500).json({ erro: "Erro ao deletar" })
+  }
 })
 
 /**
  * @swagger
  * /medicamentos/{id}/tomei:
  *   patch:
- *     summary: Confirma que o paciente tomou o medicamento
+ *     summary: Marcar medicamento como tomado (somente paciente)
  *     tags: [Medicamentos]
  *     security:
  *       - bearerAuth: []
@@ -268,143 +284,47 @@ router.delete("/:id", auth, async (req, res) => {
  *       - in: path
  *         name: id
  *         required: true
- *         description: ID do medicamento
  *         schema:
  *           type: string
+ *         description: ID do medicamento
  *     responses:
  *       200:
- *         description: Medicamento marcado como tomado com sucesso
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 _id:
- *                   type: string
- *                 nome:
- *                   type: string
- *                 dosagem:
- *                   type: string
- *                 frequencia:
- *                   type: string
- *                 tomado:
- *                   type: boolean
+ *         description: Medicamento marcado como tomado
  *       403:
- *         description: Apenas pacientes podem confirmar
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 erro:
- *                   type: string
- *                   example: Apenas pacientes podem confirmar
+ *         description: Sem permissão
  *       404:
  *         description: Medicamento não encontrado
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 erro:
- *                   type: string
- *                   example: Medicamento não encontrado
  *       500:
- *         description: Erro interno no servidor
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 erro:
- *                   type: string
- *                   example: Erro ao confirmar medicamento
+ *         description: Erro interno
  */
-router.patch("/:id/tomei", auth, async (req, res) => {
+// =======================
+// MARCAR COMO TOMADO
+// =======================
+router.patch("/:id/tomei", auth, checkRole(["paciente"]), async (req, res) => {
   try {
-    const user = await User.findById(req.userId)
+    const ref = db.collection("medicamentos").doc(req.params.id)
+    const doc = await ref.get()
 
-    if (user.tipo !== "paciente") {
-      return res.status(403).json({ erro: "Apenas pacientes podem confirmar" })
-    }
-
-    const med = await Medicamento.findOneAndUpdate(
-      { _id: req.params.id, userId: user._id },
-      { tomado: true },
-      { new: true }
-    )
-
-    if (!med) {
+    if (!doc.exists) {
       return res.status(404).json({ erro: "Medicamento não encontrado" })
     }
 
-    res.json(med)
+    const data = doc.data()
 
-  } catch (err) {
-    res.status(500).json({ erro: "Erro ao confirmar medicamento" })
-  }
-})
+    if (data.pacienteId !== req.user.uid) {
+      return res.status(403).json({ erro: "Sem permissão" })
+    }
 
+    await ref.update({ tomado: true })
 
-/**
- * @swagger
- * /medicamentos/status:
- *   get:
- *     summary: Listar medicamentos por status (tomados e pendentes)
- *     tags: [Medicamentos]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Lista de medicamentos separados por status
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 tomados:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       _id:
- *                         type: string
- *                       nome:
- *                         type: string
- *                       tomado:
- *                         type: boolean
- *                 pendentes:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       _id:
- *                         type: string
- *                       nome:
- *                         type: string
- *                       tomado:
- *                         type: boolean
- *       401:
- *         description: Não autorizado
- *       500:
- *         description: Erro ao buscar medicamentos
- */
-router.get("/status", auth,checkRole(["paciente"]), async (req, res) => {
-  try {
-    const tomados = await Medicamento.find({
-      userId: req.userId,
+    return res.json({
+      id: doc.id,
+      ...data,
       tomado: true
     })
 
-    const pendentes = await Medicamento.find({
-      userId: req.userId,
-      tomado: false
-    })
-
-    res.json({ tomados, pendentes })
-
   } catch (err) {
-    res.status(500).json({ erro: "Erro ao buscar medicamentos" })
+    return res.status(500).json({ erro: "Erro ao confirmar medicamento" })
   }
 })
 
