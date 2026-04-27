@@ -3,53 +3,51 @@ const { db } = require("../config/firebase")
 const { enviarNotificacao } = require("../services/notificationService")
 
 cron.schedule("* * * * *", async () => {
-  console.log("Verificando medicamentos...")
+  console.log("🔎 Verificando horários de medicamentos...")
 
   const agora = new Date()
 
+  const horaAtual = agora.toTimeString().slice(0, 5) // "HH:MM"
+
   try {
-    const snapshot = await db
-      .collection("medicamentos")
-      .where("tomado", "==", false)
-      .get()
+    const snapshot = await db.collection("medicamentos").get()
 
     for (const doc of snapshot.docs) {
       const med = doc.data()
 
-      if (!med.createdAt) continue
+      if (!med.horarios || !med.pacienteId) continue
 
-      // simulação simples de horário (ajuste se tiver horário real depois)
-      const criadoEm = med.createdAt.toDate
-        ? med.createdAt.toDate()
-        : new Date(med.createdAt)
+      // verifica se o horário atual bate com algum horário do remédio
+      const deveTomarAgora = med.horarios.includes(horaAtual)
 
-      // 🔥 lógica simples: alerta se passou do tempo (exemplo)
-      const limite = new Date(criadoEm.getTime() + 60 * 60 * 1000)
+      if (!deveTomarAgora) continue
 
-      if (agora >= limite) {
+      // evita spam (já tomou hoje?)
+      const hoje = agora.toISOString().split("T")[0]
 
-        const userDoc = await db
-          .collection("usuarios")
-          .doc(med.pacienteId)
-          .get()
+      if (med.tomadasHoje?.includes(hoje)) continue
 
-        const user = userDoc.data()
+      // pega paciente
+      const userDoc = await db.collection("usuarios").doc(med.pacienteId).get()
+      const user = userDoc.data()
 
-        if (user?.fcmToken) {
-          await enviarNotificacao(
-            user.fcmToken,
-            "Hora do remédio 💊",
-            `Não esqueça de tomar: ${med.nome}`
-          )
-        }
+      if (!user?.fcmToken) continue
+      // 🔥 envia notificação
+      await enviarNotificacao(
+        user.fcmToken,
+        "💊 Hora do remédio",
+        `Está na hora de tomar: ${med.nome}`
+      )
+      // marca que já notificou hoje
+      await doc.ref.update({
+        notificado: true,
+        ultimoHorarioNotificado: horaAtual
+      })
 
-        await doc.ref.update({ notificado: true })
-
-        console.log(`Notificação enviada para medicamento ${doc.id}`)
-      }
+      console.log(`✔ Notificação enviada: ${med.nome}`)
     }
 
   } catch (err) {
-    console.log("Erro no monitoramento:", err)
+    console.log(" Erro no cron:", err)
   }
 })

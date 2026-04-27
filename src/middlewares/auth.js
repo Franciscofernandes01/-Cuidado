@@ -1,5 +1,5 @@
 const { admin } = require("../config/firebase")
-
+// 🔥 middleware de autenticação Firebase
 module.exports = async (req, res, next) => {
   const authHeader = req.headers.authorization
 

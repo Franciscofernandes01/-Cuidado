@@ -7,7 +7,8 @@ exports.criarMedicamento = async (data) => {
     publicId: nanoid(6),
     nome: data.nome,
     dosagem: data.dosagem,
-    frequencia: data.frequencia,
+    horarios: data.horarios,
+    dias: data.days,
     userId: data.userId,
     tomado: false,
     criadoEm: new Date()

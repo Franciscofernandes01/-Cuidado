@@ -1,5 +1,5 @@
 const { db } = require("../config/firebase")
-
+// 🔥 middleware de permissão por tipo de usuário
 const checkRole = (roles) => {
   return async (req, res, next) => {
     try {

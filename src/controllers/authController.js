@@ -1,4 +1,5 @@
-exports.register = async (req, res) => {
+
+exports.register = async (req, res) => {// 🔥 controller de registro
   try {
     const { nome, email, senha, tipo, pacienteId } = req.body
 
@@ -13,7 +14,7 @@ exports.register = async (req, res) => {
     })
 
     const uid = userRecord.uid
-
+// 🔥 dados do usuário no Firestore
     const userData = {
       nome,
       email,
