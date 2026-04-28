@@ -1,6 +1,6 @@
 const { admin, db } = require("../config/firebase")
 
-// 🔥 envia notificação para um usuário
+//  envia notificação para um usuário
 async function enviarNotificacao(uid, titulo, mensagem) {
   try {
     // busca usuário no Firestore
@@ -13,7 +13,7 @@ async function enviarNotificacao(uid, titulo, mensagem) {
 
     const user = userDoc.data()
 
-    // 🔥 precisa ter o token do celular
+    // precisa ter o token do celular
     if (!user.fcmToken) {
       console.log("Usuário sem FCM Token")
       return

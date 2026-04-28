@@ -1,5 +1,6 @@
 const { db } = require("../config/firebase")
 const { nanoid } = require("nanoid")
+const axios = require("axios")
 
 // criar medicamento
 exports.criarMedicamento = async (data) => {
@@ -9,7 +10,7 @@ exports.criarMedicamento = async (data) => {
     dosagem: data.dosagem,
     horarios: data.horarios,
     dias: data.days,
-    userId: data.userId,
+    uid: data.uid,
     tomado: false,
     criadoEm: new Date()
   })
@@ -17,11 +18,23 @@ exports.criarMedicamento = async (data) => {
   return { id: doc.id, ...data }
 }
 
+exports.buscarMedicamento = async (nome) => {
+  const response = await axios.get(
+    `https://api.fda.gov/drug/label.json?search=openfda.brand_name:${nome}&limit=5`
+  )
+
+  return response.data.results.map(item => ({
+    nome: item.openfda?.brand_name?.[0],
+    principioAtivo: item.openfda?.generic_name?.[0],
+    fabricante: item.openfda?.manufacturer_name?.[0]
+  }))
+}
+
 // listar por usuário
-exports.listarPorUsuario = async (userId) => {
+exports.listarPorUsuario = async (uid) => {
   const snapshot = await db
     .collection("medicamentos")
-    .where("userId", "==", userId)
+    .where("uid", "==", uid)
     .get()
 
   return snapshot.docs.map(doc => ({
