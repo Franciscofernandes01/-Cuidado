@@ -17,7 +17,7 @@ async function loginGoogle() {
     console.log("Logado com:", user.email)
 
     const token = await user.getIdToken()
-
+// envia token para backend para criar ou atualizar usuário no Firestore
     const response = await fetch("http://localhost:3000/auth/google", {
       method: "POST",
       headers: {
@@ -28,7 +28,7 @@ async function loginGoogle() {
         tipo: "familiar"
       })
     })
-
+// resposta do backend pode conter erros ou confirmação de login, aqui só logamos para ver o que vem
     const data = await response.json()
     console.log("Backend:", data)
 
@@ -38,7 +38,7 @@ async function loginGoogle() {
     console.error("Erro login:", error)
   }
 }
-
+// função de logout, remove token do localStorage e desloga do Firebase
 async function logout() {
   const auth = getAuth()
 

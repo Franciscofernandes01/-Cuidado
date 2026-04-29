@@ -20,6 +20,36 @@ const { buscarMedicamento } = require("../services/medicamentoService")
  *     tags: [Medicamentos]
  *     security:
  *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - nome
+ *               - dosagem
+ *               - frequencia
+ *             properties:
+ *               nome:
+ *                 type: string
+ *                 example: Paracetamol
+ *               dosagem:
+ *                 type: string
+ *                 example: 500mg
+ *               frequencia:
+ *                 type: number
+ *                 example: 8
+ *               estoque:
+ *                 type: number
+ *                 example: 10
+ *     responses:
+ *       201:
+ *         description: Medicamento criado com sucesso
+ *       400:
+ *         description: Dados inválidos
+ *       500:
+ *         description: Erro interno
  */
 router.post("/", auth, checkRole(["familiar"]), async (req, res) => {
   try {
@@ -84,6 +114,9 @@ router.post("/", auth, checkRole(["familiar"]), async (req, res) => {
  *     tags: [Medicamentos]
  *     security:
  *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Lista de medicamentos
  */
 router.get("/status", auth, async (req, res) => {
   try {
@@ -133,6 +166,16 @@ router.get("/status", auth, async (req, res) => {
  *     tags: [Medicamentos]
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: nome
+ *         required: true
+ *         schema:
+ *           type: string
+ *         example: Dipirona
+ *     responses:
+ *       200:
+ *         description: Resultado da busca
  */
 router.get("/buscar", auth, async (req, res) => {
   try {
@@ -156,9 +199,89 @@ router.get("/buscar", auth, async (req, res) => {
  * /medicamentos/{id}:
  *   put:
  *     summary: Atualizar medicamento
+ *     description: Atualiza os dados de um medicamento pertencente ao paciente vinculado ao familiar logado.
  *     tags: [Medicamentos]
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         description: ID do medicamento
+ *         schema:
+ *           type: string
+ *           example: abc123medicamentoId
+ *     requestBody:
+ *       required: true
+ *       description: Campos que serão atualizados no medicamento
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               nome:
+ *                 type: string
+ *                 example: Dipirona
+ *               dosagem:
+ *                 type: string
+ *                 example: 500mg
+ *               frequencia:
+ *                 type: string
+ *                 example: 8h em 8h
+ *               horario:
+ *                 type: string
+ *                 example: 08:00
+ *     responses:
+ *       200:
+ *         description: Medicamento atualizado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 mensagem:
+ *                   type: string
+ *                   example: Atualizado com sucesso
+ *       400:
+ *         description: Requisição inválida (body vazio ou dados incorretos)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 erro:
+ *                   type: string
+ *                   example: Body vazio
+ *       403:
+ *         description: Sem permissão para atualizar este medicamento
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 erro:
+ *                   type: string
+ *                   example: Sem permissão
+ *       404:
+ *         description: Medicamento não encontrado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 erro:
+ *                   type: string
+ *                   example: Medicamento não encontrado
+ *       500:
+ *         description: Erro interno no servidor
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 erro:
+ *                   type: string
+ *                   example: Erro ao atualizar
  */
 router.put("/:id", auth, checkRole(["familiar"]), async (req, res) => {
   try {
@@ -193,6 +316,15 @@ router.put("/:id", auth, checkRole(["familiar"]), async (req, res) => {
  *     tags: [Medicamentos]
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Deletado com sucesso
  */
 router.delete("/:id", auth, checkRole(["familiar"]), async (req, res) => {
   try {
@@ -227,6 +359,15 @@ router.delete("/:id", auth, checkRole(["familiar"]), async (req, res) => {
  *     tags: [Medicamentos]
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Medicamento confirmado
  */
 router.patch("/:id/tomei", auth, checkRole(["paciente"]), async (req, res) => {
   try {

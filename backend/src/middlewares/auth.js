@@ -1,5 +1,5 @@
 const { admin } = require("../config/firebase")
-
+// middleware de autenticação, verifica token do Firebase e adiciona dados do usuário na requisição
 module.exports = async (req, res, next) => {
   const token = req.headers.authorization?.split(" ")[1]
 

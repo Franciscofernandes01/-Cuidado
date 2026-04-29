@@ -2,6 +2,9 @@ const express = require("express")
 const router = express.Router()
 const { admin, db } = require("../config/firebase")
 const auth = require("../middlewares/auth")
+const QRCode = require("qrcode")
+const crypto = require("crypto")
+const checkRole = require("../middlewares/permissao")
 
 
 /**
@@ -47,17 +50,17 @@ const auth = require("../middlewares/auth")
  */
 router.post("/google", async (req, res) => {
   try {
-    const { token, tipo, fcmToken } = req.body
+    const { token, tipo, fcmToken } = req.body// token obrigatório para verificar identidade do usuário
 
     if (!token) {
       return res.status(400).json({ erro: "Token é obrigatório" })
     }
 
-    const decoded = await admin.auth().verifyIdToken(token)
-    const uid = decoded.uid
+    const decoded = await admin.auth().verifyIdToken(token)// token válido, pega UID do usuário
+    const uid = decoded.uid// verifica se usuário já existe no Firestore
 
-    const userRef = db.collection("usuarios").doc(uid)
-    const userDoc = await userRef.get()
+    const userRef = db.collection("usuarios").doc(uid)// se não existir, cria novo documento com tipo e dados do Google
+    const userDoc = await userRef.get()// se for primeiro login, tipo é obrigatório para definir se é paciente ou familiar
 
     // PRIMEIRO LOGIN
     if (!userDoc.exists) {
@@ -124,7 +127,7 @@ router.post("/google", async (req, res) => {
  *       404:
  *         description: Usuário ou paciente não encontrado
  */
-router.post("/vincular", auth, async (req, res) => {
+router.post("/vincularUid", auth, async (req, res) => {//vincula com uid do paciente
   try {
     const { pacienteId } = req.body
 
@@ -176,5 +179,128 @@ router.post("/vincular", auth, async (req, res) => {
     return res.status(500).json({ erro: "Erro ao vincular" })
   }
 })
+/**
+ * @swagger
+ * tags:
+ *   name: Vínculo
+ *   description: Vinculação entre paciente e cuidador via QR Code
+ */
+
+/**
+ * @swagger
+ * /vinculo/gerar:
+ *   get:
+ *     summary: Gerar QR Code para vínculo (paciente)
+ *     tags: [Vínculo]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: QR Code gerado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 qr:
+ *                   type: string
+ *                   example: data:image/png;base64,iVBORw0KGgoAAAANS...
+ *       403:
+ *         description: Acesso negado
+ */
+router.get("/gerar", auth, checkRole(["paciente"]), async (req, res) => {
+  try {
+    const token = require("crypto").randomBytes(20).toString("hex")
+
+    // salva token no banco
+    await db.collection("vinculos").doc(token).set({
+      pacienteId: req.user.uid,
+      criadoEm: new Date(),
+      expiraEm: new Date(Date.now() + 10 * 60 * 1000) // 10 min
+    })
+
+    // gera QR Code com o token
+    const qr = await QRCode.toDataURL(
+      JSON.stringify({
+        token
+      })
+    )
+
+    return res.json({ qr, token})
+
+  } catch (err) {
+    return res.status(500).json({ erro: "Erro ao gerar QR Code" })
+  }
+})
+/**
+ * @swagger
+ * /vinculo/vincular:
+ *   post:
+ *     summary: Vincular cuidador ao paciente via QR Code
+ *     tags: [Vínculo]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - token
+ *             properties:
+ *               token:
+ *                 type: string
+ *                 example: a8f9c1b2d3e4f5g6h7i8
+ *     responses:
+ *       200:
+ *         description: Vínculo realizado com sucesso
+ *       400:
+ *         description: Token inválido ou expirado
+ *       403:
+ *         description: Acesso negado
+ */
+router.post("/vincular", auth, checkRole(["familiar"]), async (req, res) => {
+  try {
+    const { token } = req.body
+
+    if (!token) {
+      return res.status(400).json({ erro: "Token obrigatório" })
+    }
+
+    const ref = db.collection("vinculos").doc(token)
+    const doc = await ref.get()
+
+    if (!doc.exists) {
+      return res.status(400).json({ erro: "Token inválido" })
+    }
+
+    const data = doc.data()
+
+    // verifica expiração
+    if (new Date() > data.expiraEm.toDate()) {
+      return res.status(400).json({ erro: "QR Code expirado" })
+    }
+
+    // cria vínculo
+    await db.collection("usuarios").doc(req.user.uid).update({
+      pacienteId: data.pacienteId
+    })
+
+    // opcional: marcar no paciente
+    await db.collection("usuarios").doc(data.pacienteId).update({
+      familiarId: req.user.uid
+    })
+
+    // remove token (uso único)
+    await ref.delete()
+
+    return res.json({ mensagem: "Vínculo realizado com sucesso" })
+
+  } catch (err) {
+    return res.status(500).json({ erro: "Erro ao vincular" })
+  }
+})
+
 
 module.exports = router

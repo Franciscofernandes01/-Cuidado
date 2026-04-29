@@ -31,25 +31,9 @@
   <input id="pacienteId" placeholder="UID do paciente" />
   <button onclick="vincular()">Vincular</button>
 
-  <hr>
-
-  <!-- CRIAR MEDICAMENTO -->
-  <h3>Criar medicamento</h3>
-  <input id="nome" placeholder="Nome" />
-  <input id="dosagem" placeholder="Dosagem" />
-  <input id="frequencia" placeholder="Frequência (ex: 8)" />
-  <input id="estoque" placeholder="Estoque" />
-  <button onclick="criarMedicamento()">Criar</button>
-
-  <hr>
-
-  <!-- LISTAR -->
-  <h3>Medicamentos</h3>
-  <button onclick="listar()">Listar</button>
-
-  <ul id="lista"></ul>
-
   <script type="module">
+
+  //
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js"
   import { 
     getAuth, 
@@ -143,74 +127,6 @@
     alert("Vinculado!")
   }
 
-  // ================= CRIAR MEDICAMENTO =================
-  window.criarMedicamento = async function () {
-    const nome = document.getElementById("nome").value
-    const dosagem = document.getElementById("dosagem").value
-    const frequencia = Number(document.getElementById("frequencia").value)
-    const estoque = Number(document.getElementById("estoque").value)
-
-    token = localStorage.getItem("token")
-
-    const res = await fetch("http://localhost:3000/medicamentos", {
-      method: "POST",
-      headers: {
-        "Authorization": "Bearer " + token,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        nome,
-        dosagem,
-        frequencia,
-        estoque
-      })
-    })
-
-    const data = await res.json()
-    console.log(data)
-
-    alert("Medicamento criado!")
-  }
-
-  // ================= LISTAR =================
-  window.listar = async function () {
-    token = localStorage.getItem("token")
-
-    const res = await fetch("http://localhost:3000/medicamentos/status", {
-      headers: {
-        "Authorization": "Bearer " + token
-      }
-    })
-
-    const data = await res.json()
-
-    const lista = document.getElementById("lista")
-    lista.innerHTML = ""
-
-    data.pendentes.forEach(med => {
-      const li = document.createElement("li")
-      li.innerHTML = `
-        ${med.nome} - ${med.dosagem}
-        <button onclick="tomei('${med.id}')">Tomei</button>
-      `
-      lista.appendChild(li)
-    })
-  }
-
-  // ================= TOMAR =================
-  window.tomei = async function (id) {
-    token = localStorage.getItem("token")
-
-    await fetch(`http://localhost:3000/medicamentos/${id}/tomei`, {
-      method: "PATCH",
-      headers: {
-        "Authorization": "Bearer " + token
-      }
-    })
-
-    alert("Confirmado!")
-    listar()
-  }
 </script>
 
 </body>

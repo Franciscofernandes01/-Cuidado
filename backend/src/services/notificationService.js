@@ -18,7 +18,7 @@ async function enviarNotificacao(uid, titulo, mensagem) {
       console.log("Usuário sem FCM Token")
       return
     }
-
+// monta mensagem e envia via Firebase Cloud Messaging
     const message = {
       notification: {
         title: titulo,
@@ -26,7 +26,7 @@ async function enviarNotificacao(uid, titulo, mensagem) {
       },
       token: user.fcmToken
     }
-
+// envia notificação
     await admin.messaging().send(message)
 
     console.log("Notificação enviada para:", uid)
