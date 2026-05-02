@@ -313,6 +313,7 @@ router.put("/:id", auth, checkRole(["familiar"]), async (req, res) => {
  * /medicamentos/{id}:
  *   delete:
  *     summary: Deletar medicamento
+ *     description: Permite que o paciente dono ou o familiar vinculado exclua um medicamento
  *     tags: [Medicamentos]
  *     security:
  *       - bearerAuth: []
@@ -320,56 +321,28 @@ router.put("/:id", auth, checkRole(["familiar"]), async (req, res) => {
  *       - in: path
  *         name: id
  *         required: true
+ *         description: ID do medicamento
  *         schema:
  *           type: string
+ *           example: abc123
  *     responses:
  *       200:
- *         description: Deletado com sucesso
+ *         description: Medicamento deletado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               example:
+ *                 mensagem: Medicamento deletado com sucesso
+ *       403:
+ *         description: Sem permissão
+ *       404:
+ *         description: Medicamento não encontrado
+ *       500:
+ *         description: Erro interno
  */
-router.delete("/:id", auth, checkRole(["familiar"]), async (req, res) => {
-  try {
-    const userDoc = await db.collection("usuarios").doc(req.user.uid).get()
-    const user = userDoc.data()
 
-    const ref = db.collection("medicamentos").doc(req.params.id)
-    const doc = await ref.get()
-
-    if (!doc.exists) {
-      return res.status(404).json({ erro: "Medicamento não encontrado" })
-    }
-
-    if (doc.data().pacienteId !== user.pacienteId) {
-      return res.status(403).json({ erro: "Sem permissão" })
-    }
-
-    await ref.delete()
-
-    return res.json({ mensagem: "Deletado com sucesso" })
-
-  } catch (err) {
-    return res.status(500).json({ erro: "Erro ao deletar" })
-  }
-})
-
-/**
- * @swagger
- * /medicamentos/{id}/tomei:
- *   patch:
- *     summary: Marcar medicamento como tomado
- *     tags: [Medicamentos]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Medicamento confirmado
- */
-router.patch("/:id/tomei", auth, checkRole(["paciente"]), async (req, res) => {
+router.delete("/:id", auth, async (req, res) => {
   try {
     const ref = db.collection("medicamentos").doc(req.params.id)
     const doc = await ref.get()
@@ -380,21 +353,219 @@ router.patch("/:id/tomei", auth, checkRole(["paciente"]), async (req, res) => {
 
     const data = doc.data()
 
-    if (data.pacienteId !== req.user.uid) {
+    //busca paciente
+    const pacienteId = data.pacienteId
+
+    if (!pacienteId) {
+      return res.status(400).json({ erro: "Medicamento sem pacienteId" })
+    }
+
+    // usuário logado
+    const userId = req.user.uid
+
+    // busca paciente no banco
+    const pacienteDoc = await db.collection("usuarios").doc(pacienteId).get()
+
+    if (!pacienteDoc.exists) {
+      return res.status(404).json({ erro: "Paciente não encontrado" })
+    }
+
+    const paciente = pacienteDoc.data()
+
+    // regra de permissão
+    const podeDeletar =
+      userId === pacienteId || // paciente dono
+      userId === paciente.familiarId // familiar vinculado
+
+    if (!podeDeletar) {
       return res.status(403).json({ erro: "Sem permissão" })
     }
 
-    const hoje = new Date().toISOString().split("T")[0]
+    // deleta medicamento
+    await ref.delete()
 
+    return res.json({
+      mensagem: "Medicamento deletado com sucesso"
+    })
+
+  } catch (err) {
+    console.log(err)
+    return res.status(500).json({ erro: "Erro ao deletar medicamento" })
+  }
+})
+
+/**
+ * @swagger
+ * /medicamentos/{id}/historico:
+ *   get:
+ *     summary: Listar histórico de doses do medicamento
+ *     tags: [Medicamentos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         description: ID do medicamento
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Histórico retornado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 medicamento:
+ *                   type: string
+ *                 historico:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       data:
+ *                         type: string
+ *                         example: 2026-05-02T14:00:00Z
+ *                       tipo:
+ *                         type: string
+ *                         example: notificacao
+ *                       dosesPendentes:
+ *                         type: number
+ *                         example: 2
+ *       404:
+ *         description: Medicamento não encontrado
+ *       403:
+ *         description: Sem permissão
+ */
+router.get("/:id/historico", auth, async (req, res) => {
+  try {
+    const ref = db.collection("medicamentos").doc(req.params.id)
+    const doc = await ref.get()
+
+    if (!doc.exists) {
+      return res.status(404).json({ erro: "Medicamento não encontrado" })
+    }
+
+    const data = doc.data()
+
+    // AQUI: busca o usuário logado
+    const userDoc = await db.collection("usuarios").doc(req.user.uid).get()
+    const user = userDoc.data()
+
+    // valida acesso (paciente OU familiar vinculado)
+    if (
+      data.pacienteId !== req.user.uid &&
+      user.pacienteId !== data.pacienteId
+    ) {
+      return res.status(403).json({ erro: "Sem permissão" })
+    }
+
+    // resposta
+    return res.json({
+      medicamento: data.nome,
+      historico: data.historico || []
+    })
+
+  } catch (err) {
+    return res.status(500).json({ erro: "Erro ao buscar histórico" })
+  }
+})
+
+/**
+ * @swagger
+ * /medicamentos/{id}/tomei:
+ *   patch:
+ *     summary: Marcar medicamento como tomado (paciente ou familiar vinculado)
+ *     tags: [Medicamentos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID do medicamento
+ *     responses:
+ *       200:
+ *         description: Medicamento marcado como tomado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 mensagem:
+ *                   type: string
+ *                   example: Medicamento tomado com sucesso
+ *       403:
+ *         description: Usuário sem permissão para marcar este medicamento
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 erro:
+ *                   type: string
+ *                   example: Sem permissão
+ *       404:
+ *         description: Medicamento não encontrado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 erro:
+ *                   type: string
+ *                   example: Medicamento não encontrado
+ *       500:
+ *         description: Erro interno do servidor
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 erro:
+ *                   type: string
+ *                   example: Erro ao confirmar medicamento
+ */
+router.patch("/:id/tomei", auth, async (req, res) => {
+  try {
+    const ref = db.collection("medicamentos").doc(req.params.id)
+    const doc = await ref.get()
+
+    if (!doc.exists) {
+      return res.status(404).json({ erro: "Medicamento não encontrado" })
+    }
+
+    const data = doc.data()
+
+    //busca usuário logado
+    const userDoc = await db.collection("usuarios").doc(req.user.uid).get()
+    const user = userDoc.data()
+
+    //regra de permissão
+    const ehPaciente = data.pacienteId === req.user.uid
+    const ehFamiliarDoPaciente = user?.pacienteId === data.pacienteId
+
+    if (!ehPaciente && !ehFamiliarDoPaciente) {
+      return res.status(403).json({ erro: "Sem permissão" })
+    }
+
+    const agora = new Date()
+    const hoje = new Date().toISOString().split("T")[0]
+// marca como tomado, atualiza estoque e adiciona data em tomadasHoje para controle diário
     await ref.update({
       tomado: true,
       estoque: Math.max((data.estoque || 0) - 1, 0),
-      tomadasHoje: [...(data.tomadasHoje || []), hoje]
+      tomadasHoje: [...(data.tomadasHoje || []), hoje],
+      ultimoTomadoEm: agora
     })
 
     return res.json({ mensagem: "Medicamento tomado com sucesso" })
 
   } catch (err) {
+    console.log(err)
     return res.status(500).json({ erro: "Erro ao confirmar medicamento" })
   }
 })

@@ -79,10 +79,11 @@ router.post("/google", async (req, res) => {
         criadoEm: new Date()
       })
     }
-
-    // salva FCM token se vier
+    // se o cliente enviou token do FCM, salva no banco para enviar notificações push
     if (fcmToken) {
-      await userRef.set({ fcmToken }, { merge: true })
+      await db.collection("usuarios").doc(uid).update({
+      fcmToken
+      })
     }
 
     return res.json({

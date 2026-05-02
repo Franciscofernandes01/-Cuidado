@@ -37,6 +37,7 @@ exports.googleLogin = async (req, res) => {
 
   } catch (err) {
     return res.status(401).json({ error: "Token inválido" })
+    console.log("Erro no login com Google:", err)
   }
 }
 
