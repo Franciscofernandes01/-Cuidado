@@ -3,7 +3,6 @@ const express = require("express")
 const cors = require("cors")
 const swaggerUi = require("swagger-ui-express")
 const swaggerSpec = require("./swagger")
-const vinculoRoutes = require("./src/routes/authRoutes")
 
 const app = express()
 
@@ -21,8 +20,6 @@ app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec))
 // cron (monitoramento)
 require("./src/jobs/monitoramento")
 
-// rotas de vínculo
-app.use("/vinculo", vinculoRoutes)
 
 // start server
 app.listen(3000, () => {

@@ -158,12 +158,86 @@ router.get("/paciente/status", auth, async (req, res) => {// busca status do pac
 
 /**
  * @swagger
- * /auth/vincular:
+ * auth/vincularUid:
  *   post:
- *     summary: Vincular familiar a paciente
- *     tags: [Autenticação]
+ *     summary: Vincula um familiar a um paciente
+ *     description: |
+ *       Permite que um usuário do tipo "familiar" se vincule a um paciente já existente no sistema.
+ *       O familiar só pode estar vinculado a um único paciente.
+ *     tags:
+ *       - Vinculos
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - pacienteId
+ *             properties:
+ *               pacienteId:
+ *                 type: string
+ *                 example: "abc123PacienteId"
+ *                 description: ID do paciente no Firestore
+ *     responses:
+ *       200:
+ *         description: Vinculação realizada com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 mensagem:
+ *                   type: string
+ *                   example: Vinculado com sucesso
+ *
+ *       400:
+ *         description: Requisição inválida (dados faltando ou regras violadas)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 erro:
+ *                   type: string
+ *                   example: pacienteId é obrigatório
+ *
+ *       403:
+ *         description: Acesso negado (usuário não é familiar)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 erro:
+ *                   type: string
+ *                   example: Apenas familiares podem se vincular
+ *
+ *       404:
+ *         description: Usuário ou paciente não encontrado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 erro:
+ *                   type: string
+ *                   example: Paciente não encontrado
+ *
+ *       500:
+ *         description: Erro interno no servidor
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 erro:
+ *                   type: string
+ *                   example: Erro ao vincular
  */
-router.post("/vincularUid", auth, async (req, res) => {
+router.post("auth/vincularUid", auth, async (req, res) => {
   try {
     const { pacienteId } = req.body
 
@@ -211,10 +285,57 @@ router.post("/vincularUid", auth, async (req, res) => {
 
 /**
  * @swagger
- * tags:
- *   name: Vínculo
+ * auth/gerar:
+ *   get:
+ *     summary: Gera QR Code para vínculo entre paciente e familiar
+ *     description: |
+ *       Gera um token temporário e um QR Code que pode ser usado por um familiar
+ *       para se vincular ao paciente autenticado.
+ *       O token expira em 10 minutos.
+ *     tags:
+ *       - Vinculos
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: QR Code gerado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 qr:
+ *                   type: string
+ *                   description: QR Code em base64 (DataURL)
+ *                   example: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..."
+ *                 token:
+ *                   type: string
+ *                   description: Token de vínculo gerado
+ *                   example: "a3f9c1d2e5b8..."
+ *
+ *       403:
+ *         description: Acesso negado (usuário não é paciente)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 erro:
+ *                   type: string
+ *                   example: Apenas pacientes podem acessar esta rota
+ *
+ *       500:
+ *         description: Erro ao gerar QR Code
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 erro:
+ *                   type: string
+ *                   example: Erro ao gerar QR Code
  */
-router.get("/gerar", auth, checkRole(["paciente"]), async (req, res) => {
+router.get("/auth/gerar", auth, checkRole(["paciente"]), async (req, res) => {// gera QR Code para vínculo (apenas paciente)
   try {
     const token = require("crypto").randomBytes(20).toString("hex")
 
@@ -235,7 +356,7 @@ router.get("/gerar", auth, checkRole(["paciente"]), async (req, res) => {
 
 /**
  * @swagger
- * /vinculo/vincular:
+ * /auth/vincular:
  *   post:
  *     summary: Vincular familiar ao paciente via QR Code
  *     description: |
