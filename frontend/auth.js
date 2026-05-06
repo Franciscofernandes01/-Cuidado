@@ -1,23 +1,30 @@
-import { getAuth, signInWithPopup, GoogleAuthProvider, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js"
+import {
+  getAuth,
+  signInWithPopup,
+  GoogleAuthProvider,
+  signOut
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js"
 
+let intervalStatus = null // controla o intervalo
 
+// ================= LOGIN =================
 async function loginGoogle() {
   try {
     const auth = getAuth()
     const provider = new GoogleAuthProvider()
 
-    // FORÇA escolher conta
     provider.setCustomParameters({
       prompt: "select_account"
     })
-
+// abre popup para login
     const result = await signInWithPopup(auth, provider)
     const user = result.user
 
     console.log("Logado com:", user.email)
 
     const token = await user.getIdToken()
-// envia token para backend para criar ou atualizar usuário no Firestore
+
+    // LOGIN NO BACKEND
     const response = await fetch("http://localhost:3000/auth/google", {
       method: "POST",
       headers: {
@@ -28,23 +35,105 @@ async function loginGoogle() {
         tipo: "familiar"
       })
     })
-// resposta do backend pode conter erros ou confirmação de login, aqui só logamos para ver o que vem
+
     const data = await response.json()
     console.log("Backend:", data)
 
     localStorage.setItem("token", token)
 
+    // Atualiza status imediatamente
+    await atualizarStatus()
+
+    // Inicia atualização automática
+    iniciarAtualizacaoAutomatica()
+
   } catch (error) {
     console.error("Erro login:", error)
   }
 }
-// função de logout, remove token do localStorage e desloga do Firebase
+
+// ================= ATUALIZAR STATUS =================
+async function atualizarStatus() {
+  try {
+    const token = localStorage.getItem("token")
+    if (!token) return
+
+    //simulação de bateria (0 a 100)
+    const bateria = Math.floor(Math.random() * 100)
+
+    await fetch("http://localhost:3000/usuarios/status", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        bateria,
+        online: true
+      })
+    })
+
+    console.log("Status atualizado:", bateria + "%")
+
+  } catch (err) {
+    console.log("Erro ao atualizar status:", err)
+  }
+}
+
+// ================= LOOP AUTOMÁTICO =================
+function iniciarAtualizacaoAutomatica() {
+  if (intervalStatus) return // evita duplicar
+
+  intervalStatus = setInterval(() => {
+    atualizarStatus()
+  }, 60000) // 1 minuto
+
+  console.log("Monitoramento iniciado")
+}
+
+// ================= LOGOUT =================
 async function logout() {
-  const auth = getAuth()
+  try {
+    const auth = getAuth()
+    const token = localStorage.getItem("token")
 
-  await signOut(auth) 
+    //marca offline antes de sair
+    if (token) {
+      await fetch("http://localhost:3000/usuarios/status", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          online: false
+        })
+      })
+    }
 
-  localStorage.removeItem("token")
+    // para o monitoramento
+    if (intervalStatus) {
+      clearInterval(intervalStatus)
+      intervalStatus = null
+    }
 
-  console.log("Deslogado")
+    await signOut(auth)
+    localStorage.removeItem("token")
+
+    console.log("Deslogado")
+
+  } catch (err) {
+    console.log("Erro logout:", err)
+  }
+}
+
+async function enviarSocorro() {
+  const token = localStorage.getItem("token")
+
+  await fetch("http://localhost:3000/auth/socorro", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  })
 }

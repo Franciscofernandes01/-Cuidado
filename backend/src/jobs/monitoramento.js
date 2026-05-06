@@ -1,122 +1,3 @@
-/*const cron = require("node-cron")
-const { db } = require("../config/firebase")
-const { enviarNotificacao } = require("../services/notificationService")
-
-cron.schedule("* * * * *", async () => {
-  console.log("Verificando por usuários...")
-
-  const agora = new Date()
-  const hoje = agora.toISOString().split("T")[0]
-
-  try {
-    // pega todos os usuários
-    const usuariosSnap = await db.collection("usuarios").get()
-
-    for (const userDoc of usuariosSnap.docs) {
-      const user = userDoc.data()
-      const userId = userDoc.id
-
-      // só pacientes
-      if (user.tipo !== "paciente") continue
-
-      //tokens (paciente + familiar)
-      let tokens = []
-
-      if (user.fcmToken) {
-        tokens.push(user.fcmToken)
-      }
-
-      if (user.familiarId) {// busca token do familiar vinculado
-        const famDoc = await db.collection("usuarios").doc(user.familiarId).get()
-        const familiar = famDoc.data()
-
-        if (familiar?.fcmToken) {
-          tokens.push(familiar.fcmToken)
-        }
-      }
-
-      if (tokens.length === 0) continue
-
-      //busca medicamentos DO USUÁRIO
-      const medsSnap = await db
-        .collection("medicamentos")
-        .where("pacienteId", "==", userId)
-        .get()
-
-      for (const doc of medsSnap.docs) {
-        const med = doc.data()
-
-        if (!med.frequencia || !med.ultimoTomadoEm) continue
-
-        // ================= ESTOQUE =================
-        if ((med.estoque ?? 0) <= 5) {
-          if (med.alertaEstoqueEnviado !== hoje) {
-
-            console.log(`Estoque baixo: ${med.nome}`)
-
-            for (const token of tokens) {
-              await enviarNotificacao(
-                token,
-                "Estoque baixo!",
-                `O medicamento ${med.nome} está acabando`
-              )
-            }
-
-            await doc.ref.update({// atualiza para não enviar mais de um alerta por dia
-              alertaEstoqueEnviado: hoje
-            })
-          } else {
-            console.log("ALERTA ESTOQUE JÁ ENVIADO HOJE!!")
-          }
-        }
-
-        // ================= FREQUÊNCIA =================
-        
-        const ultimo = med.ultimoTomadoEm.toDate()// calcula horário do próximo medicamento baseado no último tomado + frequência
-
-        const proximoHorario = new Date(
-          ultimo.getTime() + med.frequencia * 60 * 60 * 1000
-        )
-
-        const diff = agora - proximoHorario
-        console.log("⏱️ DIFF:", diff)
-        const deveNotificar = diff >= 0 && diff < 300000// notifica se estiver entre 0 e 5 minutos atrasado
-
-        if (!deveNotificar) continue
-
-        const identificador = proximoHorario.toISOString()// usa horário do próximo medicamento como identificador único para evitar notificações duplicadas
-
-        if (
-          med.ultimoHorarioNotificado === identificador &&
-          med.ultimoDiaNotificado === hoje
-        ) continue
-
-        console.log(`Hora do remédio: ${med.nome}`)
-
-        for (const token of tokens) {// envia para paciente e familiar
-          console.log("Enviando para:", token)
-
-          await enviarNotificacao(
-            token,
-            "Hora do remédio",
-            `Está na hora de tomar: ${med.nome}`
-          )
-        }
-
-        await doc.ref.update({
-          ultimoHorarioNotificado: identificador,
-          ultimoDiaNotificado: hoje
-        })
-
-        console.log(`Notificação enviada: ${med.nome}`)
-      }
-    }
-
-  } catch (err) {
-    console.log("Erro no cron:", err)
-  }
-
-})*/
 const cron = require("node-cron");
 const { db } = require("../config/firebase");
 const { enviarNotificacao } = require("../services/notificationService");
@@ -154,6 +35,57 @@ cron.schedule("* * * * *", async () => {
       }
 
       if (tokens.length === 0) continue;
+
+      // ================= STATUS DO PACIENTE =================
+
+      const ultimo = user.ultimoOnline?.toDate?.();
+      const agora = new Date();
+
+      const tempoOffline = ultimo ? agora - ultimo : null;
+
+      const offline = tempoOffline && tempoOffline > 30 * 60 * 1000; // 30 min
+      const bateriaBaixa = (user.bateria ?? 100) <= 20;
+
+      // controle para evitar spam
+      const hoje = agora.toISOString().split("T")[0];
+
+      // ================= ALERTA OFFLINE =================
+      if (offline) {
+        if (user.alertaOfflineEnviado !== hoje) {
+          console.log(`Paciente offline: ${user.nome}`);
+
+          for (const token of tokens) {
+            await enviarNotificacao(
+              token,
+              "Paciente offline",
+              `${user.nome} está offline há mais de 30 minutos`,
+            );
+          }
+
+          await userDoc.ref.update({
+            alertaOfflineEnviado: hoje,
+          });
+        }
+      }
+
+      // ================= ALERTA BATERIA =================
+      if (bateriaBaixa) {
+        if (user.alertaBateriaEnviado !== hoje) {
+          console.log(`Bateria baixa: ${user.nome}`);
+
+          for (const token of tokens) {
+            await enviarNotificacao(
+              token,
+              "Bateria baixa",
+              `${user.nome} está com bateria em ${user.bateria || 0}%`,
+            );
+          }
+
+          await userDoc.ref.update({
+            alertaBateriaEnviado: hoje,
+          });
+        }
+      }
 
       // ================= MEDICAMENTOS =================
       const medsSnap = await db

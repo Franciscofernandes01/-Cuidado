@@ -3,6 +3,23 @@
 <head>
   <meta charset="UTF-8" />
   <title>Sistema de Medicamentos</title>
+
+  <style>
+    .btn-socorro {
+      background: #e53935;
+      color: white;
+      border: none;
+      padding: 15px 30px;
+      font-size: 18px;
+      border-radius: 10px;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+
+    .btn-socorro:hover {
+      background: #c62828;
+    }
+  </style>
 </head>
 <body>
 
@@ -11,7 +28,7 @@
   <!-- LOGIN -->
   <button onclick="loginGoogle()">Login com Google</button>
 
-<!--LOGOUT -->
+  <!-- LOGOUT -->
   <button onclick="logout()">Logout</button>
 
   <hr>
@@ -31,9 +48,16 @@
   <input id="pacienteId" placeholder="UID do paciente" />
   <button onclick="vincular()">Vincular</button>
 
+  <hr>
+
+  <!-- SOCORRO -->
+  <h3>Emergência</h3>
+  <button class="btn-socorro" onclick="enviarSocorro()">
+    🚨 PEDIR SOCORRO
+  </button>
+
   <script type="module">
 
-  //
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js"
   import { getMessaging, getToken } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging.js"
   
@@ -62,7 +86,6 @@
   window.loginGoogle = async function () {
     const provider = new GoogleAuthProvider()
 
-    //  força escolher conta SEMPRE
     provider.setCustomParameters({
       prompt: "select_account"
     })
@@ -70,9 +93,9 @@
     const result = await signInWithPopup(auth, provider)
     const user = result.user
 
-    token = await user.getIdToken()//  gera token do Firebase
+    token = await user.getIdToken()
 
-    const fcmToken = await gerarFcmToken()//  token do FCM mensagens push
+    const fcmToken = await gerarFcmToken()
 
     localStorage.setItem("token", token)
 
@@ -83,7 +106,7 @@
       },
       body: JSON.stringify({
         token,
-        tipo: "paciente", //  tipo padrão, pode ser alterado depois
+        tipo: "paciente",
         fcmToken
       })
     })
@@ -93,19 +116,14 @@
 
   // ================= LOGOUT =================
   window.logout = async function () {
-    await signOut(auth) //  desloga do Firebase
-
-    localStorage.removeItem("token") //  remove token do backend
-
+    await signOut(auth)
+    localStorage.removeItem("token")
     alert("Deslogado com sucesso!")
-
-    console.log("Logout realizado")
   }
 
   // ================= ENVIAR TIPO =================
   window.enviarTipo = async function () {
     const tipo = document.getElementById("tipo").value
-
     token = localStorage.getItem("token")
 
     const res = await fetch("http://localhost:3000/auth/google", {
@@ -128,7 +146,6 @@
   // ================= VINCULAR =================
   window.vincular = async function () {
     const pacienteId = document.getElementById("pacienteId").value
-
     token = localStorage.getItem("token")
 
     const res = await fetch("http://localhost:3000/auth/vincular", {
@@ -146,38 +163,69 @@
     alert("Vinculado!")
   }
 
-  
-// ================= GERAR FCM TOKEN =================
-async function gerarFcmToken() {
-  try {
-    const permission = await Notification.requestPermission()
+  // ================= SOCORRO =================
+  window.enviarSocorro = async function () {
+    token = localStorage.getItem("token")
 
-    if (permission !== "granted") {
-      console.log("Permissão negada")
+    if (!token) {
+      alert("Você precisa estar logado")
+      return
+    }
+
+    try {
+      const res = await fetch("http://localhost:3000/socorro", {
+        method: "POST",
+        headers: {
+          "Authorization": "Bearer " + token,
+          "Content-Type": "application/json"
+        }
+      })
+
+      const data = await res.json()
+
+      if (res.ok) {
+        alert("🚨 Socorro enviado!")
+      } else {
+        alert("Erro: " + data.erro)
+      }
+
+    } catch (err) {
+      console.error(err)
+      alert("Erro ao enviar socorro")
+    }
+  }
+
+  // ================= FCM =================
+  async function gerarFcmToken() {
+    try {
+      const permission = await Notification.requestPermission()
+
+      if (permission !== "granted") {
+        console.log("Permissão negada")
+        return null
+      }
+      
+      await navigator.serviceWorker.register("/firebase-messaging-sw.js")
+
+      const registration = await navigator.serviceWorker.ready
+
+      const fcmToken = await getToken(messaging, {
+        vapidKey: "BEsKDt1Yo1dDRsDbdvFH9jZrjDP-RgD_eC_sheGzQrQIhRldCSwLDUEPnMki4vpushxfhgYF0yQnFfCXVTfpq80",
+        serviceWorkerRegistration: registration
+      })
+
+      console.log("FCM Token:", fcmToken)
+
+      return fcmToken
+
+    } catch (err) {
+      console.error("Erro ao gerar FCM token:", err)
       return null
     }
-    
-    await navigator.serviceWorker.register("/firebase-messaging-sw.js")// registra o service worker para receber notificações push
-
-    const registration = await navigator.serviceWorker.ready // espera o service worker estar pronto
-
-// gera o token do FCM usando o VAPID key e o service worker
-    const fcmToken = await getToken(messaging, {
-      vapidKey: "BEsKDt1Yo1dDRsDbdvFH9jZrjDP-RgD_eC_sheGzQrQIhRldCSwLDUEPnMki4vpushxfhgYF0yQnFfCXVTfpq80",
-      serviceWorkerRegistration: registration
-    })
-
-    console.log("FCM Token:", fcmToken)
-
-    return fcmToken
-
-  } catch (err) {
-    console.error("Erro ao gerar FCM token:", err)
-    return null
   }
-}
 
 </script>
 
 </body>
 </html>
+
