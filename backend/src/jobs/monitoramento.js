@@ -189,31 +189,65 @@ cron.schedule("* * * * *", async () => {
         const ultimo = med.ultimoTomadoEm.toDate();
         const freqMs = med.frequencia * 60 * 60 * 1000;
 
-        let dosesPendentes = 0;
         let proximo = new Date(ultimo);
+        let dosesPendentes = 0;
+        let historicoAtualizado = [...(med.historico || [])];
 
-        // calcula quantas doses já deveriam ter sido tomadas
         while (proximo <= agora) {
-          dosesPendentes++;
+          const diff = agora - proximo;
+
+          let status = "pendente";
+
+          if (diff > 300000) {
+            status = "atrasado";
+          }
+
+          // conta pendentes (mantém comportamento antigo)
+          if (diff >= 0) {
+            dosesPendentes++;
+          }
+
+          const jaExiste = historicoAtualizado.find(
+            (h) => h.horarioPrevisto === proximo.toISOString(),
+          );
+
+          if (!jaExiste) {
+            historicoAtualizado.push({
+              horarioPrevisto: proximo.toISOString(),
+              dataRegistro: agora,
+              status,
+            });
+          }
+
           proximo = new Date(proximo.getTime() + freqMs);
         }
 
-        // remove a primeira (que é o último tomado)
+        // remove o último tomado da contagem
         dosesPendentes = Math.max(dosesPendentes - 1, 0);
 
         console.log(`${med.nome} → doses pendentes:`, dosesPendentes);
 
-        if (dosesPendentes === 0) continue;
+        if (dosesPendentes === 0) {
+          await doc.ref.update({ historico: historicoAtualizado });
+          continue;
+        }
 
-        const identificador = proximo.toISOString();
+        // próxima dose futura
+        const proximaDose = proximo;
+        const diff = agora - proximaDose;
+
+        const deveNotificar = diff >= 0 && diff < 300000;
+
+        const identificador = proximaDose.toISOString();
 
         if (
           med.ultimoHorarioNotificado === identificador &&
           med.ultimoDiaNotificado === hoje
-        )
+        ) {
+          await doc.ref.update({ historico: historicoAtualizado });
           continue;
+        }
 
-        // mensagem inteligente
         const mensagem =
           dosesPendentes === 1
             ? `Está na hora de tomar: ${med.nome}`
@@ -225,18 +259,16 @@ cron.schedule("* * * * *", async () => {
           await enviarNotificacao(token, "Lembrete de medicamento", mensagem);
         }
 
-        // salva histórico simples
+        historicoAtualizado.push({
+          horarioPrevisto: proximaDose.toISOString(),
+          dataRegistro: agora,
+          status: "notificado",
+        });
+
         await doc.ref.update({
           ultimoHorarioNotificado: identificador,
           ultimoDiaNotificado: hoje,
-          historico: [
-            ...(med.historico || []),
-            {
-              data: agora,
-              tipo: "notificacao",
-              dosesPendentes,
-            },
-          ],
+          historico: historicoAtualizado,
         });
 
         console.log(`Notificação enviada: ${med.nome}`);

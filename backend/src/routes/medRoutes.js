@@ -398,20 +398,26 @@ router.delete("/:id", auth, async (req, res) => {
  * @swagger
  * /medicamentos/{id}/historico:
  *   get:
- *     summary: Listar histórico de doses do medicamento
- *     tags: [Medicamentos]
+ *     summary: Listar histórico com resumo das doses
+ *     description: |
+ *       Retorna o histórico completo do medicamento junto com um resumo das doses:
+ *       - pendentes
+ *       - atrasadas
+ *       - tomadas
+ *       - notificadas
+ *     tags:
+ *       - Medicamentos
  *     security:
  *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
- *         description: ID do medicamento
  *         schema:
  *           type: string
  *     responses:
  *       200:
- *         description: Histórico retornado com sucesso
+ *         description: Histórico com resumo
  *         content:
  *           application/json:
  *             schema:
@@ -419,115 +425,141 @@ router.delete("/:id", auth, async (req, res) => {
  *               properties:
  *                 medicamento:
  *                   type: string
+ *                   example: Dipirona
+ *                 resumo:
+ *                   type: object
+ *                   properties:
+ *                     pendentes:
+ *                       type: number
+ *                       example: 1
+ *                     atrasadas:
+ *                       type: number
+ *                       example: 2
+ *                     tomadas:
+ *                       type: number
+ *                       example: 3
+ *                     notificadas:
+ *                       type: number
+ *                       example: 2
  *                 historico:
  *                   type: array
  *                   items:
  *                     type: object
  *                     properties:
- *                       data:
+ *                       horarioPrevisto:
  *                         type: string
- *                         example: 2026-05-02T14:00:00Z
- *                       tipo:
+ *                         format: date-time
+ *                       dataRegistro:
  *                         type: string
- *                         example: notificacao
- *                       dosesPendentes:
- *                         type: number
- *                         example: 2
- *       404:
- *         description: Medicamento não encontrado
- *       403:
- *         description: Sem permissão
+ *                         format: date-time
+ *                       status:
+ *                         type: string
+ *                         enum: [pendente, atrasado, notificado, tomado]
  */
 router.get("/:id/historico", auth, async (req, res) => {
   try {
-    const ref = db.collection("medicamentos").doc(req.params.id)
-    const doc = await ref.get()
+    const ref = db.collection("medicamentos").doc(req.params.id);
+    const doc = await ref.get();
 
     if (!doc.exists) {
-      return res.status(404).json({ erro: "Medicamento não encontrado" })
+      return res.status(404).json({ erro: "Medicamento não encontrado" });
     }
 
-    const data = doc.data()
+    const data = doc.data();
 
     // AQUI: busca o usuário logado
-    const userDoc = await db.collection("usuarios").doc(req.user.uid).get()
-    const user = userDoc.data()
+    const userDoc = await db.collection("usuarios").doc(req.user.uid).get();
+    const user = userDoc.data();
 
     // valida acesso (paciente OU familiar vinculado)
     if (
       data.pacienteId !== req.user.uid &&
       user.pacienteId !== data.pacienteId
     ) {
-      return res.status(403).json({ erro: "Sem permissão" })
+      return res.status(403).json({ erro: "Sem permissão" });
     }
 
-    // resposta
+    const historico = data.historico || [];
+
+    // resumo das doses
+    const resumo = {
+      pendentes: 0,
+      atrasadas: 0,
+      tomadas: 0,
+      notificadas: 0,
+    };
+
+    for (const h of historico) {
+      if (h.status === "pendente") resumo.pendentes++;
+      if (h.status === "atrasado") resumo.atrasadas++;
+      if (h.status === "tomado") resumo.tomadas++;
+      if (h.status === "notificado") resumo.notificadas++;
+    }
+
     return res.json({
       medicamento: data.nome,
-      historico: data.historico || []
-    })
-
+      resumo,
+      historico,
+    });
   } catch (err) {
-    return res.status(500).json({ erro: "Erro ao buscar histórico" })
+    return res.status(500).json({ erro: "Erro ao buscar histórico" });
   }
-})
+});
 
 /**
  * @swagger
  * /medicamentos/{id}/tomei:
  *   patch:
- *     summary: Marcar medicamento como tomado (paciente ou familiar vinculado)
- *     tags: [Medicamentos]
+ *     summary: Marcar medicamento como tomado
+ *     description: |
+ *       Marca o medicamento como tomado pelo paciente ou familiar vinculado.
+ *       
+ *       A rota:
+ *       - Verifica se o medicamento existe
+ *       - Valida permissão (paciente ou familiar)
+ *       - Atualiza:
+ *         - campo "tomado"
+ *         - estoque (decrementa 1)
+ *         - lista "tomadasHoje"
+ *         - campo "ultimoTomadoEm"
+ *         - histórico com horário previsto, data do registro e status "tomado"
+ *     tags:
+ *       - Medicamentos
  *     security:
  *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
+ *         description: ID do medicamento
  *         schema:
  *           type: string
- *         description: ID do medicamento
+ *           example: abc123
  *     responses:
  *       200:
- *         description: Medicamento marcado como tomado com sucesso
+ *         description: Medicamento tomado com sucesso
  *         content:
  *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 mensagem:
- *                   type: string
- *                   example: Medicamento tomado com sucesso
+ *             example:
+ *               mensagem: Medicamento tomado com sucesso
  *       403:
- *         description: Usuário sem permissão para marcar este medicamento
+ *         description: Usuário sem permissão
  *         content:
  *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 erro:
- *                   type: string
- *                   example: Sem permissão
+ *             example:
+ *               erro: Sem permissão
  *       404:
  *         description: Medicamento não encontrado
  *         content:
  *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 erro:
- *                   type: string
- *                   example: Medicamento não encontrado
+ *             example:
+ *               erro: Medicamento não encontrado
  *       500:
- *         description: Erro interno do servidor
+ *         description: Erro interno
  *         content:
  *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 erro:
- *                   type: string
- *                   example: Erro ao confirmar medicamento
+ *             example:
+ *               erro: Erro ao confirmar medicamento
  */
 router.patch("/:id/tomei", auth, async (req, res) => {
   try {
@@ -554,16 +586,43 @@ router.patch("/:id/tomei", auth, async (req, res) => {
 
     const agora = new Date()
     const hoje = new Date().toISOString().split("T")[0]
-// marca como tomado, atualiza estoque e adiciona data em tomadasHoje para controle diário
+
+    const historico = data.historico || []
+    const freqMs = (data.frequencia || 1) * 60 * 60 * 1000
+
+    // encontra o horário previsto mais próximo
+    let horarioBase = data.ultimoTomadoEm
+      ? data.ultimoTomadoEm.toDate()
+      : new Date(agora.getTime() - freqMs)
+
+    let horarioPrevisto = new Date(horarioBase)
+
+    while (horarioPrevisto < agora) {
+      horarioPrevisto = new Date(horarioPrevisto.getTime() + freqMs)
+    }
+
+    // volta um passo pra pegar o horário correto
+    horarioPrevisto = new Date(horarioPrevisto.getTime() - freqMs)
+
+    // atualiza histórico (evita duplicar)
+    const historicoAtualizado = historico.filter(
+      (h) => h.horarioPrevisto !== horarioPrevisto.toISOString()
+    )
+
+    historicoAtualizado.push({
+      horarioPrevisto: horarioPrevisto.toISOString(),
+      dataRegistro: agora,
+      status: "tomado"
+    })
+
     await ref.update({
       tomado: true,
       estoque: Math.max((data.estoque || 0) - 1, 0),
       tomadasHoje: [...(data.tomadasHoje || []), hoje],
-      ultimoTomadoEm: agora
+      ultimoTomadoEm: agora,
+      historico: historicoAtualizado
     })
-
-    return res.json({ mensagem: "Medicamento tomado com sucesso" })
-
+        return res.json({ mensagem: "Medicamento tomado com sucesso" })
   } catch (err) {
     console.log(err)
     return res.status(500).json({ erro: "Erro ao confirmar medicamento" })

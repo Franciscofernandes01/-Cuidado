@@ -8,6 +8,7 @@ exports.criarMedicamento = async (data) => {
     publicId: nanoid(6),
     nome: data.nome,
     dosagem: data.dosagem,
+    categoria: data.categoria,
     frequencia: data.frequencia,
     estoque: Number(data.estoque) || 0,
     dias: data.days,
@@ -18,7 +19,7 @@ exports.criarMedicamento = async (data) => {
 
   return { id: doc.id, ...data }
 }
-
+// buscar medicamento por nome (API FDA)
 exports.buscarMedicamento = async (nome) => {
   const response = await axios.get(
     `https://api.fda.gov/drug/label.json?search=openfda.brand_name:${nome}&limit=5`
