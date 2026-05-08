@@ -612,120 +612,252 @@ router.post("/vincular", auth, checkRole(["familiar"]), async (req, res) => {// 
 
 /**
  * @swagger
- * /auth/socorro:
+ * /auth/sos:
  *   post:
- *     summary: Aciona alerta de socorro pelo paciente
+ *     summary: Envia um alerta SOS entre paciente e cuidador
  *     description: |
- *       Permite que um paciente autenticado acione um alerta de emergência.
- *       
- *       Fluxo:
- *       - Verifica se o usuário existe
- *       - Confirma se é do tipo "paciente"
- *       - Verifica se há um familiar vinculado
- *       - Cria um evento de socorro no banco
- *       - Envia notificação push via Firebase Cloud Messaging (se disponível)
+ *       Permite que:
+ *       - pacientes enviem SOS para seus cuidadores;
+ *       - cuidadores enviem SOS para seus pacientes.
+ *
+ *       A rota também:
+ *       - registra o evento no Firestore;
+ *       - envia uma notificação FCM Data Message;
+ *       - dispara alertas sonoros/vibração no aplicativo.
+ *
  *     tags:
- *       - Autenticação
+ *       - SOS
+ *
  *     security:
  *       - bearerAuth: []
+ *
  *     responses:
  *       200:
- *         description: Alerta de socorro enviado com sucesso
+ *         description: SOS enviado com sucesso
  *         content:
  *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 mensagem:
- *                   type: string
- *                   example: Alerta de socorro enviado
+ *             example:
+ *               mensagem: SOS enviado com sucesso
  *
  *       400:
- *         description: Paciente sem familiar vinculado
- *         content:
- *           application/json:
- *             example:
- *               erro: Paciente sem familiar vinculado
- *
- *       403:
- *         description: Usuário não autorizado
- *         content:
- *           application/json:
- *             example:
- *               erro: Apenas pacientes podem acionar socorro
- *
- *       404:
- *         description: Usuário ou familiar não encontrado
+ *         description: Usuário sem vínculo
  *         content:
  *           application/json:
  *             examples:
- *               UsuarioNaoEncontrado:
- *                 value:
- *                   erro: Usuário não encontrado
- *               FamiliarNaoEncontrado:
- *                 value:
- *                   erro: Familiar não encontrado
  *
- *       500:
- *         description: Erro interno ao enviar socorro
+ *               pacienteSemCuidador:
+ *                 summary: Paciente sem cuidador vinculado
+ *                 value:
+ *                   erro: Paciente sem cuidador vinculado
+ *
+ *               cuidadorSemPaciente:
+ *                 summary: Cuidador sem paciente vinculado
+ *                 value:
+ *                   erro: Cuidador sem paciente vinculado
+ *
+ *       401:
+ *         description: Token inválido ou ausente
  *         content:
  *           application/json:
  *             example:
- *               erro: Erro ao enviar socorro
+ *               erro: Token inválido
+ *
+ *       403:
+ *         description: Usuário sem permissão
+ *         content:
+ *           application/json:
+ *             example:
+ *               erro: Usuário sem permissão
+ *
+ *       404:
+ *         description: Usuário não encontrado
+ *         content:
+ *           application/json:
+ *             examples:
+ *
+ *               usuarioNaoEncontrado:
+ *                 summary: Usuário autenticado não encontrado
+ *                 value:
+ *                   erro: Usuário não encontrado
+ *
+ *               pacienteNaoEncontrado:
+ *                 summary: Paciente não encontrado
+ *                 value:
+ *                   erro: Paciente não encontrado
+ *
+ *               destinoNaoEncontrado:
+ *                 summary: Usuário destino não encontrado
+ *                 value:
+ *                   erro: Usuário destino não encontrado
+ *
+ *       500:
+ *         description: Erro interno ao enviar SOS
+ *         content:
+ *           application/json:
+ *             example:
+ *               erro: Erro ao enviar SOS
  */
-// ================= SOCORRO =================
-router.post("/socorro", auth, async (req, res) => {
+router.post("/sos", auth, async (req, res) => {
   try {
-    const userDoc = await db.collection("usuarios").doc(req.user.uid).get()
+
+    // usuário autenticado
+    const userDoc =
+      await db.collection("usuarios")
+      .doc(req.user.uid)
+      .get()
 
     if (!userDoc.exists) {
-      return res.status(404).json({ erro: "Usuário não encontrado" })
+      return res.status(404).json({
+        erro: "Usuário não encontrado"
+      })
     }
 
     const user = userDoc.data()
 
-    if (user.tipo !== "paciente") {
-      return res.status(403).json({ erro: "Apenas pacientes podem acionar socorro" })
+    let destinoId = null
+    let patientName = null
+
+    // PACIENTE -> CUIDADOR
+    if (user.tipo === "paciente") {
+
+      if (!user.familiarId) {
+        return res.status(400).json({
+          erro: "Paciente sem cuidador vinculado"
+        })
+      }
+
+      destinoId = user.familiarId
+
+      // nome do paciente
+      patientName = user.nome
     }
 
-    if (!user.familiarId) {
-      return res.status(400).json({ erro: "Paciente sem familiar vinculado" })
+    // CUIDADOR -> PACIENTE
+    else if (user.tipo === "familiar") {
+
+      if (!user.pacienteId) {
+        return res.status(400).json({
+          erro: "Cuidador sem paciente vinculado"
+        })
+      }
+
+      destinoId = user.pacienteId
+
+      // busca nome do paciente
+      const pacienteDoc =
+        await db.collection("usuarios")
+        .doc(user.pacienteId)
+        .get()
+
+      if (!pacienteDoc.exists) {
+        return res.status(404).json({
+          erro: "Paciente não encontrado"
+        })
+      }
+
+      const paciente = pacienteDoc.data()
+
+      patientName = paciente.nome
     }
 
-    const familiarDoc = await db.collection("usuarios").doc(user.familiarId).get()
 
-    if (!familiarDoc.exists) {
-      return res.status(404).json({ erro: "Familiar não encontrado" })
+    // BLOQUEIO
+    else {
+
+      return res.status(403).json({
+        erro: "Usuário sem permissão"
+      })
     }
 
-    const familiar = familiarDoc.data()
+    // BUSCA DESTINO
+    const destinoDoc =
+      await db.collection("usuarios")
+      .doc(destinoId)
+      .get()
 
-    await db.collection("eventos").add({// registra evento de socorro para histórico e controle
-      tipo: "socorro",
-      pacienteId: req.user.uid,
-      familiarId: user.familiarId,
+    if (!destinoDoc.exists) {
+      return res.status(404).json({
+        erro: "Usuário destino não encontrado"
+      })
+    }
+
+    const destino = destinoDoc.data()
+
+    // REGISTRA EVENTO
+    await db.collection("eventos").add({
+
+      tipo: "sos",
+
+      enviadoPor: req.user.uid,
+
+      destinoId,
+
+      patientName,
+
       criadoEm: new Date(),
+
       status: "ativo"
     })
 
-    if (familiar?.fcmToken) {
+    // ENVIA PUSH
+    if (destino?.fcmToken) {
+
       try {
+
         await admin.messaging().send({
-          token: familiar.fcmToken,
-          notification: {
-            title: "🚨 SOCORRO",
-            body: `${user.nome} acionou o botão de emergência!`
+
+          token: destino.fcmToken,
+
+          // DATA MESSAGE
+          data: {
+
+            type: "sos",
+
+            patientName: patientName,
+
+            title: "🚨 SOS",
+
+            body: `${user.nome} acionou o botão SOS!`
+          },
+
+          android: {
+
+            priority: "high"
+          },
+
+          apns: {
+
+            payload: {
+
+              aps: {
+
+                contentAvailable: true,
+
+                sound: "default",
+
+                badge: 1
+              }
+            }
           }
         })
+
       } catch (e) {
+
         console.log("Erro push:", e)
       }
     }
 
-    return res.json({ mensagem: "Alerta de socorro enviado" })
+    return res.json({
+      mensagem: "SOS enviado com sucesso"
+    })
 
   } catch (err) {
-    return res.status(500).json({ erro: "Erro ao enviar socorro" })
+
+    console.log(err)
+
+    return res.status(500).json({
+      erro: "Erro ao enviar SOS"
+    })
   }
 })
 

@@ -128,12 +128,22 @@ async function logout() {
 }
 
 async function enviarSocorro() {
+    try {
   const token = localStorage.getItem("token")
 
-  await fetch("http://localhost:3000/auth/socorro", {
+  await fetch("http://localhost:3000/auth/sos", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`
     }
   })
+
+  const data = await response.json()
+
+     console.log(data)
+
+   } catch (err) {
+
+     console.log(err)
+   }
 }
