@@ -1,35 +1,93 @@
 const { db } = require("../config/firebase")
 const { nanoid } = require("nanoid")
 const axios = require("axios")
+const { gerarHorarios } = require("../utils/horarios")
 
 // criar medicamento
-exports.criarMedicamento = async (data) => {
+/*exports.criarMedicamento = async (data) => {
   const doc = await db.collection("medicamentos").add({
     publicId: nanoid(6),
     nome: data.nome,
     dosagem: data.dosagem,
-    categoria: data.categoria,
+    categoria: data.categoria,// ex: comprimido, xarope, injeção
     frequencia: data.frequencia,
     estoque: Number(data.estoque) || 0,
-    dias: data.days,
-    uid: data.uid,
+    estoqueMinimo: Number(data.estoqueMinimo) || 0,//pode ter min ou não
+    observacao: data.observacao || "",// para observação do medicamento
+    //dias: data.days, para quais dias da semana o remédio deve ser tomado
+    uid: data.uid,// id do usuário dono do medicamento
     tomado: false,
-    criadoEm: new Date()
+    criadoEm: new Date()// para controle de notificações
   })
 
   return { id: doc.id, ...data }
-}
-// buscar medicamento por nome (API FDA)
-exports.buscarMedicamento = async (nome) => {
-  const response = await axios.get(
-    `https://api.fda.gov/drug/label.json?search=openfda.brand_name:${nome}&limit=5`
-  )
+}*/
 
-  return response.data.results.map(item => ({
-    nome: item.openfda?.brand_name?.[0],
-    principioAtivo: item.openfda?.generic_name?.[0],
-    fabricante: item.openfda?.manufacturer_name?.[0]
-  }))
+// criar medicamento
+exports.criarMedicamento = async (data) => {
+  const categoriaConfig = categoriasConfig[data.categoria]
+
+  if (!categoriaConfig) {
+    throw new Error("Categoria inválida")
+  }
+
+  const horarios = gerarHorarios(data.frequencia)
+
+  const medicamento = {
+    publicId: nanoid(6),
+    nome: data.nome,
+    dosagem: data.dosagem,
+    dosePorUso: data.dosePorUso,
+    categoria: data.categoria, // ex: comprimido, xarope, injeção
+    unidade: categoriaConfig.unidade,
+    fatorConversao: categoriaConfig.fatorConversao,
+    frequencia: data.frequencia,
+    horarios,
+    estoque: Number(data.estoque) || 0,
+    estoqueMinimo: Number(data.estoqueMinimo) || 0,
+    observacao: data.observacao || "",// para observação do medicamento
+    pacienteId: data.pacienteId, // id do paciente (pode ser diferente do uid do usuário, para permitir que familiares controlem os medicamentos)
+    uid: data.uid,// id do usuário dono do medicamento
+    tomado: false,
+    criadoEm: new Date()
+  }
+
+
+  const doc = await db.collection("medicamentos").add(medicamento)
+
+  return { id: doc.id, ...medicamento }
+}
+
+const categoriasConfig = { // para controle de estoque e notificações
+  Comprimido: {
+    unidade: "un",
+    fatorConversao: 1
+  },
+
+  Cápsula: {
+    unidade: "un",
+    fatorConversao: 1
+  },
+
+  Gotas: {
+    unidade: "gotas",
+    fatorConversao: 20 // 1 ml = 20 gotas (varia conforme o medicamento, mas é uma média comum)
+  },
+
+  Xarope: {
+    unidade: "ml",
+    fatorConversao: 1
+  },
+
+  Injeção: {
+    unidade: "ampola",
+    fatorConversao: 1 // pode ser ampola, seringa, etc. Depende do medicamento específico
+  },
+
+  Pomada: {
+    unidade: "g",
+    fatorConversao: 1 // pode ser grama, tubo, etc. Depende do medicamento específico
+  }
 }
 
 // listar por usuário

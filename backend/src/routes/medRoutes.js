@@ -3,7 +3,7 @@ const auth = require("../middlewares/auth")
 const checkRole = require("../middlewares/permissao")
 const { db } = require("../config/firebase")
 const { gerarHorarios } = require("../utils/horarios")
-const { buscarMedicamento } = require("../services/medicamentoService")
+const medicamentoService = require("../services/medicamentoService")
 
 /**
  * @swagger
@@ -16,47 +16,218 @@ const { buscarMedicamento } = require("../services/medicamentoService")
  * @swagger
  * /medicamentos:
  *   post:
- *     summary: Criar medicamento (somente familiar vinculado)
- *     tags: [Medicamentos]
+ *     summary: Cadastrar medicamento
+ *     description: Rota para cadastro de medicamentos por um usuário familiar vinculado a um paciente.
+ *     tags:
+ *       - Medicamentos
+ *
  *     security:
  *       - bearerAuth: []
+ *
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
  *             type: object
+ *
  *             required:
  *               - nome
  *               - dosagem
+ *               - dosePorUso
+ *               - categoria
  *               - frequencia
+ *               - estoque
+ *               - estoqueMinimo
+ *               - observacao
+ *
  *             properties:
+ *
  *               nome:
  *                 type: string
- *                 example: Paracetamol
+ *                 description: Nome do medicamento
+ *                 example: Dipirona
+ *
  *               dosagem:
  *                 type: string
+ *                 description: Concentração/apresentação do medicamento
  *                 example: 500mg
+ *
+ *               dosePorUso:
+ *                 type: number
+ *                 description: Quantidade consumida do estoque a cada tomada
+ *                 example: 2
+ *
+ *               categoria:
+ *                 type: string
+ *                 description: Categoria do medicamento
+ *                 enum:
+ *                   - Comprimido
+ *                   - Cápsula
+ *                   - Gotas
+ *                   - Xarope
+ *                   - Injeção
+ *                   - Pomada
+ *                 example: Comprimido
+ *
  *               frequencia:
  *                 type: number
+ *                 description: Frequência em horas entre as doses
  *                 example: 8
+ *
  *               estoque:
  *                 type: number
- *                 example: 10
+ *                 description: Quantidade disponível em estoque
+ *                 example: 30
+ *
+ *               estoqueMinimo:
+ *                 type: number
+ *                 description: Quantidade mínima para alerta de estoque baixo
+ *                 example: 5
+ *
+ *               observacao:
+ *                 type: string
+ *                 description: Observações importantes sobre o medicamento
+ *                 example: Tomar após as refeições
+ *
  *     responses:
+ *
  *       201:
- *         description: Medicamento criado com sucesso
+ *         description: Medicamento cadastrado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *
+ *               properties:
+ *
+ *                 id:
+ *                   type: string
+ *                   example: abc123xyz
+ *
+ *                 publicId:
+ *                   type: string
+ *                   example: X7K2P1
+ *
+ *                 nome:
+ *                   type: string
+ *                   example: Dipirona
+ *
+ *                 dosagem:
+ *                   type: string
+ *                   example: 500mg
+ *
+ *                 dosePorUso:
+ *                   type: number
+ *                   example: 2
+ *
+ *                 categoria:
+ *                   type: string
+ *                   example: Comprimido
+ *
+ *                 unidade:
+ *                   type: string
+ *                   description: Unidade de controle do estoque
+ *                   example: un
+ *
+ *                 fatorConversao:
+ *                   type: number
+ *                   description: Fator usado para conversão de unidades
+ *                   example: 1
+ *
+ *                 frequencia:
+ *                   type: number
+ *                   example: 8
+ *
+ *                 horarios:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                   example:
+ *                     - "08:00"
+ *                     - "16:00"
+ *                     - "00:00"
+ *
+ *                 estoque:
+ *                   type: number
+ *                   example: 30
+ *
+ *                 estoqueMinimo:
+ *                   type: number
+ *                   example: 5
+ *
+ *                 observacao:
+ *                   type: string
+ *                   example: Tomar após as refeições
+ *
+ *                 pacienteId:
+ *                   type: string
+ *                   example: pacienteUid123
+ *
+ *                 uid:
+ *                   type: string
+ *                   example: familiarUid123
+ *
+ *                 tomado:
+ *                   type: boolean
+ *                   example: false
+ *
+ *                 criadoEm:
+ *                   type: string
+ *                   format: date-time
+ *
  *       400:
  *         description: Dados inválidos
+ *         content:
+ *           application/json:
+ *             examples:
+ *
+ *               camposObrigatorios:
+ *                 summary: Campos obrigatórios ausentes
+ *                 value:
+ *                   erro: Campos obrigatórios
+ *
+ *               frequenciaInvalida:
+ *                 summary: Frequência inválida
+ *                 value:
+ *                   erro: Frequência inválida
+ *
+ *               categoriaInvalida:
+ *                 summary: Categoria inválida
+ *                 value:
+ *                   erro: Categoria inválida
+ *
+ *               familiarSemPaciente:
+ *                 summary: Familiar não vinculado a paciente
+ *                 value:
+ *                   erro: Familiar não vinculado a paciente
+ *
+ *       401:
+ *         description: Token inválido ou ausente
+ *
+ *       403:
+ *         description: Usuário sem permissão
+ *
+ *       404:
+ *         description: Usuário não encontrado
+ *         content:
+ *           application/json:
+ *             example:
+ *               erro: Usuário não encontrado
+ *
  *       500:
- *         description: Erro interno
+ *         description: Erro interno do servidor
+ *         content:
+ *           application/json:
+ *             example:
+ *               erro: Erro ao cadastrar medicamento
  */
 router.post("/", auth, checkRole(["familiar"]), async (req, res) => {
   try {
-    let { nome, dosagem, frequencia, estoque } = req.body
+    let { nome, dosagem,categoria,dosePorUso, frequencia, estoque, estoqueMinimo, observacao } = req.body
 
-    if (!nome || !dosagem || !frequencia) {
-      return res.status(400).json({ erro: "Campos obrigatórios: nome, dosagem, frequencia" })
+    if (!nome || !dosagem || !dosePorUso || !frequencia || !categoria || !estoque || !estoqueMinimo || !observacao) {
+      return res.status(400).json({ erro: "Campos obrigatórios: nome, dosagem, dosePorUso, frequencia, categoria, estoque, estoque minimo, observacao" })
     }
 
     frequencia = Number(frequencia)
@@ -77,28 +248,24 @@ router.post("/", auth, checkRole(["familiar"]), async (req, res) => {
       return res.status(400).json({ erro: "Familiar não vinculado a paciente" })
     }
 
-    const horarios = gerarHorarios(frequencia)
 
-    const doc = await db.collection("medicamentos").add({
-      nome,
-      dosagem,
-      frequencia,
-      horarios,
-      estoque: Number(estoque) || 0,
-      pacienteId: user.pacienteId,
-      criadoPor: req.user.uid,
-      tomado: false,
-      tomadasHoje: [],
-      createdAt: new Date()
-    })
+     const medicamento =
+      await medicamentoService.criarMedicamento({
+        nome,
+        dosagem,
+        dosePorUso,
+        categoria,
+        frequencia,
+        estoque,
+        estoqueMinimo,
+        observacao,
 
-    return res.status(201).json({
-      id: doc.id,
-      nome,
-      dosagem,
-      frequencia,
-      horarios
-    })
+        pacienteId: user.pacienteId,
+
+        uid: req.user.uid
+      })
+
+    return res.status(201).json(medicamento)
 
   } catch (err) {
     console.log(err)
@@ -158,41 +325,6 @@ router.get("/status", auth, async (req, res) => {
   }
 })
 
-/**
- * @swagger
- * /medicamentos/buscar:
- *   get:
- *     summary: Buscar medicamento em API externa
- *     tags: [Medicamentos]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: query
- *         name: nome
- *         required: true
- *         schema:
- *           type: string
- *         example: Dipirona
- *     responses:
- *       200:
- *         description: Resultado da busca
- */
-router.get("/buscar", auth, async (req, res) => {
-  try {
-    const { nome } = req.query
-
-    if (!nome) {
-      return res.status(400).json({ erro: "Informe o nome do medicamento" })
-    }
-
-    const resultado = await buscarMedicamento(nome)
-
-    return res.json(resultado)
-
-  } catch (err) {
-    return res.status(500).json({ erro: "Erro ao buscar medicamento" })
-  }
-})
 
 /**
  * @swagger
@@ -510,52 +642,54 @@ router.get("/:id/historico", auth, async (req, res) => {
  * @swagger
  * /medicamentos/{id}/tomei:
  *   patch:
- *     summary: Marcar medicamento como tomado
- *     description: |
- *       Marca o medicamento como tomado pelo paciente ou familiar vinculado.
- *       
- *       A rota:
- *       - Verifica se o medicamento existe
- *       - Valida permissão (paciente ou familiar)
- *       - Atualiza:
- *         - campo "tomado"
- *         - estoque (decrementa 1)
- *         - lista "tomadasHoje"
- *         - campo "ultimoTomadoEm"
- *         - histórico com horário previsto, data do registro e status "tomado"
+ *     summary: Confirmar tomada do medicamento
+ *     description: Marca o medicamento como tomado, atualiza o histórico e reduz o estoque com base na dose por uso.
  *     tags:
  *       - Medicamentos
+ *
  *     security:
  *       - bearerAuth: []
+ *
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
- *         description: ID do medicamento
  *         schema:
  *           type: string
- *           example: abc123
+ *         description: ID do medicamento
+ *         example: abc123xyz
+ *
  *     responses:
  *       200:
- *         description: Medicamento tomado com sucesso
+ *         description: Medicamento confirmado como tomado
  *         content:
  *           application/json:
- *             example:
- *               mensagem: Medicamento tomado com sucesso
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 mensagem:
+ *                   type: string
+ *                   example: Medicamento tomado com sucesso
+ *
+ *       401:
+ *         description: Token inválido ou ausente
+ *
  *       403:
- *         description: Usuário sem permissão
+ *         description: Usuário sem permissão para confirmar este medicamento
  *         content:
  *           application/json:
  *             example:
  *               erro: Sem permissão
+ *
  *       404:
  *         description: Medicamento não encontrado
  *         content:
  *           application/json:
  *             example:
  *               erro: Medicamento não encontrado
+ *
  *       500:
- *         description: Erro interno
+ *         description: Erro interno do servidor
  *         content:
  *           application/json:
  *             example:
@@ -614,10 +748,11 @@ router.patch("/:id/tomei", auth, async (req, res) => {
       dataRegistro: agora,
       status: "tomado"
     })
-
+// atualiza medicamento
     await ref.update({
       tomado: true,
-      estoque: Math.max((data.estoque || 0) - 1, 0),
+      estoque: Math.max((data.estoque || 0) -
+      (data.dosePorUso || 1), 0),
       tomadasHoje: [...(data.tomadasHoje || []), hoje],
       ultimoTomadoEm: agora,
       historico: historicoAtualizado

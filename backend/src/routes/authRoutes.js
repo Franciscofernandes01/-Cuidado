@@ -700,7 +700,7 @@ router.post("/socorro", auth, async (req, res) => {
 
     const familiar = familiarDoc.data()
 
-    await db.collection("eventos").add({
+    await db.collection("eventos").add({// registra evento de socorro para histórico e controle
       tipo: "socorro",
       pacienteId: req.user.uid,
       familiarId: user.familiarId,
