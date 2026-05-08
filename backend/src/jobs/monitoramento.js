@@ -2,6 +2,7 @@ const cron = require("node-cron");
 const { db } = require("../config/firebase");
 const { enviarNotificacao } = require("../services/notificationService");
 
+
 cron.schedule("* * * * *", async () => {
   console.log("Verificando por usuários...");
 
@@ -97,7 +98,7 @@ cron.schedule("* * * * *", async () => {
         const med = doc.data();
 
         // ================= ESTOQUE =================
-        if ((med.estoque ?? 0) <= 5) {
+        if ((med.estoque ?? 0) <= (med.estoqueMinimo ?? 0)) {
           if (med.alertaEstoqueEnviado !== hoje) {
             console.log(`Estoque baixo: ${med.nome}`);
 
@@ -119,89 +120,109 @@ cron.schedule("* * * * *", async () => {
         if (!med.frequencia || !med.ultimoTomadoEm) continue;
 
         const ultimo = med.ultimoTomadoEm.toDate();
+
         const freqMs = med.frequencia * 60 * 60 * 1000;
 
-        let proximo = new Date(ultimo);
-        let dosesPendentes = 0;
-        let historicoAtualizado = [...(med.historico || [])];
+        let horarioDose = new Date(ultimo.getTime() + freqMs);
 
-        while (proximo <= agora) {
-          const diff = agora - proximo;
+        const diff = agora - horarioDose;
 
-          let status = "pendente";
+        // ainda não chegou a próxima dose
+        if (diff < 0) continue;
 
-          if (diff > 300000) {
-            status = "atrasado";
-          }
+        const identificador = horarioDose.toISOString();
 
-          // conta pendentes (mantém comportamento antigo)
-          if (diff >= 0) {
-            dosesPendentes++;
-          }
+        let tipoNotificacao = null;
 
-          const jaExiste = historicoAtualizado.find(
-            (h) => h.horarioPrevisto === proximo.toISOString(),
-          );
+        let titulo = "";
+        let mensagem = "";
 
-          if (!jaExiste) {
-            historicoAtualizado.push({
-              horarioPrevisto: proximo.toISOString(),
-              dataRegistro: agora,
-              status,
-            });
-          }
-
-          proximo = new Date(proximo.getTime() + freqMs);
-        }
-
-        // remove o último tomado da contagem
-        dosesPendentes = Math.max(dosesPendentes - 1, 0);
-
-        console.log(`${med.nome} → doses pendentes:`, dosesPendentes);
-
-        if (dosesPendentes === 0) {
-          await doc.ref.update({ historico: historicoAtualizado });
-          continue;
-        }
-
-        // próxima dose futura
-        const proximaDose = proximo;
-        const diff = agora - proximaDose;
-
-        const deveNotificar = diff >= 0 && diff < 300000;
-
-        const identificador = proximaDose.toISOString();
-
+        // NA HORA DO REMÉDIO
         if (
-          med.ultimoHorarioNotificado === identificador &&
-          med.ultimoDiaNotificado === hoje
+          diff >= 0 &&
+          diff < 60000 &&
+          med.ultimoHorarioNotificado !== identificador
         ) {
-          await doc.ref.update({ historico: historicoAtualizado });
-          continue;
+          tipoNotificacao = "medicine";
+
+          titulo = "Hora do medicamento";
+
+          mensagem = `Está na hora de tomar ${med.nome}`;
         }
 
-        const mensagem =
-          dosesPendentes === 1
-            ? `Está na hora de tomar: ${med.nome}`
-            : `Você tem ${dosesPendentes} doses pendentes de ${med.nome}`;
+        // ATRASADO 10 MIN
+        else if (
+          diff >= 10 * 60 * 1000 &&
+          med.ultimoHorarioAtrasado !== identificador
+        ) {
+          tipoNotificacao = "medicine";
 
+          titulo = " Medicamento atrasado";
+
+          mensagem = `${med.nome} está atrasado há mais de 10 minutos`;
+        }
+
+        // sem notificação
+        if (!tipoNotificacao) continue;
+
+        // ENVIA DATA MESSAGE
         for (const token of tokens) {
           console.log("Enviando para:", token);
 
-          await enviarNotificacao(token, "Lembrete de medicamento", mensagem);
+          await admin.messaging().send({
+            token,
+
+            data: {
+              type: "medicine",
+
+              medicineName: med.nome,
+
+              medicineDose: med.dosagem,
+
+              title: titulo,
+
+              body: mensagem,
+            },
+
+            android: {
+              priority: "high",
+            },
+
+            apns: {
+              payload: {
+                aps: {
+                  contentAvailable: true,
+
+                  sound: "default",
+
+                  badge: 1,
+                },
+              },
+            },
+          });
         }
 
+        // HISTÓRICO
         historicoAtualizado.push({
-          horarioPrevisto: proximaDose.toISOString(),
+          horarioPrevisto: identificador,
+
           dataRegistro: agora,
-          status: "notificado",
+
+          status: titulo.includes("atrasado") ? "atrasado" : "notificado",
         });
 
-        await doc.ref.update({
-          ultimoHorarioNotificado: identificador,
-          ultimoDiaNotificado: hoje,
+        // CONTROLE ANTI-SPAM
+        const updateData = {
           historico: historicoAtualizado,
-        });
+        };
+
+        if (titulo.includes("atrasado")) {
+          updateData.ultimoHorarioAtrasado = identificador;
+        } else {
+          updateData.ultimoHorarioNotificado = identificador;
+        }
+
+        await doc.ref.update(updateData);
 
         console.log(`Notificação enviada: ${med.nome}`);
       }
