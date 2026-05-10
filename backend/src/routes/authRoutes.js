@@ -198,17 +198,12 @@ router.patch("/status", auth, async (req, res) => {
  * @swagger
  * /auth/paciente/status:
  *   get:
- *     summary: Consulta status do paciente vinculado (online, bateria e tempo offline)
+ *     summary: Retorna o status atual do paciente
  *     description: |
- *       Retorna o status do paciente vinculado ao usuário autenticado.
- *       
- *       Regras:
- *       - Se o usuário for paciente, retorna o próprio status
- *       - Se for familiar, retorna o status do paciente vinculado
- *       - Calcula se o paciente está online com base no último acesso
- *       - Retorna tempo offline formatado quando estiver offline
+ *       Retorna informações do paciente vinculado ou do próprio paciente,
+ *       incluindo status online, bateria e último acesso.
  *     tags:
- *       - Autenticação
+ *       - Status
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -224,7 +219,7 @@ router.patch("/status", auth, async (req, res) => {
  *                   example: João Silva
  *                 online:
  *                   type: boolean
- *                   example: false
+ *                   example: true
  *                 bateria:
  *                   type: number
  *                   nullable: true
@@ -232,32 +227,48 @@ router.patch("/status", auth, async (req, res) => {
  *                 ultimoOnline:
  *                   type: string
  *                   format: date-time
- *                   example: 2026-05-06T12:00:00Z
+ *                   nullable: true
+ *                   example: "2026-05-09T18:30:00.000Z"
  *                 tempoOffline:
  *                   type: string
  *                   nullable: true
- *                   example: há 5 min
+ *                   example: "5 minutos atrás"
  *
  *       400:
- *         description: Paciente não vinculado ao usuário
+ *         description: Paciente não vinculado
  *         content:
  *           application/json:
- *             example:
- *               erro: Paciente não vinculado
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 erro:
+ *                   type: string
+ *                   example: Paciente não vinculado
+ *
+ *       401:
+ *         description: Token inválido ou ausente
  *
  *       404:
  *         description: Paciente não encontrado
  *         content:
  *           application/json:
- *             example:
- *               erro: Paciente não encontrado
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 erro:
+ *                   type: string
+ *                   example: Paciente não encontrado
  *
  *       500:
- *         description: Erro interno ao buscar status
+ *         description: Erro interno do servidor
  *         content:
  *           application/json:
- *             example:
- *               erro: Erro ao buscar status
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 erro:
+ *                   type: string
+ *                   example: Erro ao buscar status
  */
 // ================= STATUS PACIENTE =================
 router.get("/paciente/status", auth, async (req, res) => {

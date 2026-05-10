@@ -27,3 +27,9 @@ build/
 
 // Chave do Firebase (NÃO COMMITAR)
 firebase-key.json
+
+# cobertura de testes
+coverage/
+
+# cache do jest
+.jest/

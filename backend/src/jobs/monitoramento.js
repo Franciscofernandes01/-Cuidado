@@ -3,6 +3,7 @@ const { db } = require("../config/firebase");
 const { enviarNotificacao } = require("../services/notificationService");
 const admin = require("firebase-admin");
 
+if (process.env.NODE_ENV !== "test") {
 
 cron.schedule("* * * * *", async () => {
   console.log("Verificando por usuários...");
@@ -233,4 +234,6 @@ cron.schedule("* * * * *", async () => {
   } catch (err) {
     console.log("Erro no cron:", err);
   }
-});
+})
+
+}

@@ -4,13 +4,14 @@ const cors = require("cors")
 const swaggerUi = require("swagger-ui-express")
 const swaggerSpec = require("./swagger")
 
+
 const app = express()
 
-// ================= MIDDLEWARES =================
+//  MIDDLEWARES 
 app.use(cors())
 app.use(express.json())
 
-// ================= ROTAS =================
+//  ROTAS 
 // authRoutes agora contém:
 // /auth/google
 // /auth/status
@@ -25,16 +26,21 @@ app.use("/auth", require("./src/routes/authRoutes"))
 app.use("/medicamentos", require("./src/routes/medRoutes"))
 
 
-// ================= SWAGGER =================
+//  SWAGGER 
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec))
 
 
-// ================= CRON JOB =================
+//  CRON JOB 
 require("./src/jobs/monitoramento")
 
 
-// ================= START SERVER =================
+
+if (process.env.NODE_ENV !== "test") {
+//  START SERVER 
 app.listen(3000, () => {
   console.log("Servidor rodando na porta 3000")
   console.log("Swagger em http://localhost:3000/api-docs")
 })
+}
+
+module.exports = app // para testes
