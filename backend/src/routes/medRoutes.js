@@ -745,7 +745,7 @@ router.patch("/:id/tomei", auth, async (req, res) => {
 
     historicoAtualizado.push({
       horarioPrevisto: horarioPrevisto.toISOString(),
-      dataRegistro: agora,
+      dataRegistro: agora.toISOString(),
       status: "tomado"
     })
 // atualiza medicamento
