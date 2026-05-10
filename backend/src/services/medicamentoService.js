@@ -49,7 +49,7 @@ exports.criarMedicamento = async (data) => {
     pacienteId: data.pacienteId, // id do paciente (pode ser diferente do uid do usuário, para permitir que familiares controlem os medicamentos)
     uid: data.uid,// id do usuário dono do medicamento
     tomado: false,
-    criadoEm: new Date()
+    criadoEm: new Date().toISOString()
   }
 
 

@@ -1,6 +1,7 @@
 const cron = require("node-cron");
 const { db } = require("../config/firebase");
 const { enviarNotificacao } = require("../services/notificationService");
+const admin = require("firebase-admin");
 
 
 cron.schedule("* * * * *", async () => {
@@ -130,9 +131,11 @@ cron.schedule("* * * * *", async () => {
         // ainda não chegou a próxima dose
         if (diff < 0) continue;
 
-        const identificador = horarioDose.toISOString();
+        const identificador = horarioDose.toISOString();// para controle anti-spam
 
-        let tipoNotificacao = null;
+        let historicoAtualizado = [...(med.historico || [])];// para manter histórico de notificações e atrasos
+
+        let tipoNotificacao = null;// para controle do tipo de notificação a ser enviada
 
         let titulo = "";
         let mensagem = "";
