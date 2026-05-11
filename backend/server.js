@@ -3,7 +3,7 @@ const express = require("express")
 const cors = require("cors")
 const swaggerUi = require("swagger-ui-express")
 const swaggerSpec = require("./swagger")
-
+const devRoutes = require("./src/routes/devRoutes")
 
 const app = express()
 
@@ -33,7 +33,7 @@ app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec))
 //  CRON JOB 
 require("./src/jobs/monitoramento")
 
-
+app.use("/dev", devRoutes)
 
 if (process.env.NODE_ENV !== "test") {
 //  START SERVER 
