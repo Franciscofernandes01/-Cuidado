@@ -750,12 +750,13 @@ router.patch("/:id/tomei", auth, async (req, res) => {
     })
 // atualiza medicamento
     await ref.update({
-      tomado: true,
       estoque: Math.max((data.estoque || 0) -
       (data.dosePorUso || 1), 0),
       tomadasHoje: [...(data.tomadasHoje || []), hoje],
       ultimoTomadoEm: agora,
-      historico: historicoAtualizado
+      historico: historicoAtualizado,
+      ultimoHorarioNotificado: null,
+      ultimoHorarioAtrasado: null,
     })
         return res.json({ mensagem: "Medicamento tomado com sucesso" })
   } catch (err) {
