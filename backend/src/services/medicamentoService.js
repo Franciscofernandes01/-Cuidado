@@ -42,6 +42,7 @@ exports.criarMedicamento = async (data) => {
     unidade: categoriaConfig.unidade,
     fatorConversao: categoriaConfig.fatorConversao,
     frequencia: data.frequencia,
+    primeiraDoseEm: data.primeiraDoseEm || new Date().toISOString(), // para controle de notificações, pode ser a data de criação ou uma data futura
     horarios,
     estoque: Number(data.estoque) || 0,
     estoqueMinimo: Number(data.estoqueMinimo) || 0,

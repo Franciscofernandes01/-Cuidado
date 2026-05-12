@@ -19,6 +19,179 @@ const { enviarNotificacao } = require("../services/notificationService");
 
 /**
  * =========================================================
+ * TESTAR NOVA LÓGICA DE PRIMEIRA DOSE
+ * =========================================================
+ */
+
+/**
+ * @swagger
+ * /dev/medicamentos/{id}/simular-primeira-dose:
+ *   patch:
+ *     summary: Simular primeira dose do medicamento
+ *     description: |
+ *       Atualiza a primeiraDoseEm e o ultimoTomadoEm para testar
+ *       o cálculo automático das próximas doses baseado na frequência.
+ *
+ *       Exemplo:
+ *       - primeira dose às 08:00
+ *       - frequência 8h
+ *
+ *       Próximas doses:
+ *       - 16:00
+ *       - 00:00
+ *       - 08:00
+ *
+ *     tags: [Dev]
+ *
+ *     security:
+ *       - bearerAuth: []
+ *
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         example: medicamento123
+ *
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - primeiraDoseEm
+ *             properties:
+ *               primeiraDoseEm:
+ *                 type: string
+ *                 format: date-time
+ *                 example: "2026-05-12T08:00:00.000Z"
+ *
+ *     responses:
+ *       200:
+ *         description: Primeira dose atualizada
+ *
+ *       400:
+ *         description: Data inválida
+ *
+ *       404:
+ *         description: Medicamento não encontrado
+ *
+ *       500:
+ *         description: Erro interno
+ */
+router.patch(
+  "/medicamentos/:id/simular-primeira-dose",
+  auth,
+  async (req, res) => {
+
+    try {
+
+      const { primeiraDoseEm } = req.body
+
+      if (!primeiraDoseEm) {
+
+        return res.status(400).json({
+          erro: "primeiraDoseEm obrigatório"
+        })
+      }
+
+      const dataPrimeiraDose =
+        new Date(primeiraDoseEm)
+
+      if (
+        isNaN(dataPrimeiraDose.getTime())
+      ) {
+
+        return res.status(400).json({
+          erro: "primeiraDoseEm inválida"
+        })
+      }
+
+      const ref = db
+        .collection("medicamentos")
+        .doc(req.params.id)
+
+      const doc = await ref.get()
+
+      if (!doc.exists) {
+
+        return res.status(404).json({
+          erro: "Medicamento não encontrado"
+        })
+      }
+
+      const med = doc.data()
+
+      // atualiza primeira dose
+      await ref.update({
+
+        primeiraDoseEm: dataPrimeiraDose,
+
+        ultimoTomadoEm: dataPrimeiraDose,
+
+        ultimoHorarioNotificado: null,
+
+        ultimoHorarioAtrasado: null,
+
+        ultimoHorarioCritico: null
+      })
+
+      // calcula próximas doses
+      const frequenciaMs =
+        (med.frequencia || 1) *
+        60 *
+        60 *
+        1000
+
+      const proximasDoses = []
+
+      let base = new Date(dataPrimeiraDose)
+
+      for (let i = 0; i < 5; i++) {
+
+        proximasDoses.push(
+          base.toISOString()
+        )
+
+        base = new Date(
+          base.getTime() + frequenciaMs
+        )
+      }
+
+      return res.json({
+
+        mensagem:
+          "Primeira dose atualizada com sucesso",
+
+        medicamento: med.nome,
+
+        frequenciaHoras: med.frequencia,
+
+        primeiraDoseEm: dataPrimeiraDose,
+
+        proximasDoses,
+
+        observacao:
+          "O cron agora calculará as doses baseado neste horário inicial"
+      })
+
+    } catch (err) {
+
+      console.log(err)
+
+      return res.status(500).json({
+        erro:
+          "Erro ao simular primeira dose"
+      })
+    }
+  }
+)
+
+
+/**
+ * =========================================================
  * TESTE PUSH SIMPLES
  * =========================================================
  */

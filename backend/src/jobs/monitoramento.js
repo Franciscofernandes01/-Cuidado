@@ -427,7 +427,7 @@ if (process.env.NODE_ENV !== "test") {
             diff >= 30 * 60 * 1000 &&
             med.ultimoHorarioCritico !== identificador
           ) {
-            tipoNotificacao = "medicine_critical";
+            tipoNotificacao = "medicine_urgent";
 
             titulo = "Medicamento não confirmado";
 

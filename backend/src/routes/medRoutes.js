@@ -17,7 +17,20 @@ const medicamentoService = require("../services/medicamentoService")
  * /medicamentos:
  *   post:
  *     summary: Cadastrar medicamento
- *     description: Rota para cadastro de medicamentos por um usuário familiar vinculado a um paciente.
+ *     description: |
+ *       Cadastra um novo medicamento para o paciente vinculado ao familiar logado.
+ *
+ *       A lógica das próximas doses será calculada com base em:
+ *       - primeiraDoseEm
+ *       - frequencia
+ *
+ *       Exemplo:
+ *       - primeiraDoseEm = 08:00
+ *       - frequencia = 8 horas
+ *
+ *       Próximas doses:
+ *       08:00 → 16:00 → 00:00 → 08:00
+ *
  *     tags:
  *       - Medicamentos
  *
@@ -37,6 +50,7 @@ const medicamentoService = require("../services/medicamentoService")
  *               - dosePorUso
  *               - categoria
  *               - frequencia
+ *               - primeiraDoseEm
  *               - estoque
  *               - estoqueMinimo
  *               - observacao
@@ -50,13 +64,13 @@ const medicamentoService = require("../services/medicamentoService")
  *
  *               dosagem:
  *                 type: string
- *                 description: Concentração/apresentação do medicamento
+ *                 description: Dosagem/apresentação do medicamento
  *                 example: 500mg
  *
  *               dosePorUso:
  *                 type: number
- *                 description: Quantidade consumida do estoque a cada tomada
- *                 example: 2
+ *                 description: Quantidade consumida por dose
+ *                 example: 1
  *
  *               categoria:
  *                 type: string
@@ -72,23 +86,31 @@ const medicamentoService = require("../services/medicamentoService")
  *
  *               frequencia:
  *                 type: number
- *                 description: Frequência em horas entre as doses
+ *                 description: Frequência em horas entre doses
  *                 example: 8
+ *
+ *               primeiraDoseEm:
+ *                 type: string
+ *                 format: date-time
+ *                 description: |
+ *                   Data/hora da primeira dose.
+ *                   Utilizada como base para calcular todas as próximas doses.
+ *                 example: 2026-05-12T08:00:00.000Z
  *
  *               estoque:
  *                 type: number
- *                 description: Quantidade disponível em estoque
+ *                 description: Quantidade disponível no estoque
  *                 example: 30
  *
  *               estoqueMinimo:
  *                 type: number
- *                 description: Quantidade mínima para alerta de estoque baixo
+ *                 description: Quantidade mínima para alerta
  *                 example: 5
  *
  *               observacao:
  *                 type: string
- *                 description: Observações importantes sobre o medicamento
- *                 example: Tomar após as refeições
+ *                 description: Observações do medicamento
+ *                 example: Tomar após alimentação
  *
  *     responses:
  *
@@ -105,10 +127,6 @@ const medicamentoService = require("../services/medicamentoService")
  *                   type: string
  *                   example: abc123xyz
  *
- *                 publicId:
- *                   type: string
- *                   example: X7K2P1
- *
  *                 nome:
  *                   type: string
  *                   example: Dipirona
@@ -117,36 +135,27 @@ const medicamentoService = require("../services/medicamentoService")
  *                   type: string
  *                   example: 500mg
  *
- *                 dosePorUso:
- *                   type: number
- *                   example: 2
- *
  *                 categoria:
  *                   type: string
  *                   example: Comprimido
  *
- *                 unidade:
- *                   type: string
- *                   description: Unidade de controle do estoque
- *                   example: un
- *
- *                 fatorConversao:
+ *                 dosePorUso:
  *                   type: number
- *                   description: Fator usado para conversão de unidades
  *                   example: 1
  *
  *                 frequencia:
  *                   type: number
  *                   example: 8
  *
- *                 horarios:
- *                   type: array
- *                   items:
- *                     type: string
- *                   example:
- *                     - "08:00"
- *                     - "16:00"
- *                     - "00:00"
+ *                 primeiraDoseEm:
+ *                   type: string
+ *                   format: date-time
+ *                   example: 2026-05-12T08:00:00.000Z
+ *
+ *                 ultimoTomadoEm:
+ *                   type: string
+ *                   format: date-time
+ *                   example: 2026-05-12T08:00:00.000Z
  *
  *                 estoque:
  *                   type: number
@@ -158,7 +167,7 @@ const medicamentoService = require("../services/medicamentoService")
  *
  *                 observacao:
  *                   type: string
- *                   example: Tomar após as refeições
+ *                   example: Tomar após alimentação
  *
  *                 pacienteId:
  *                   type: string
@@ -167,10 +176,6 @@ const medicamentoService = require("../services/medicamentoService")
  *                 uid:
  *                   type: string
  *                   example: familiarUid123
- *
- *                 tomado:
- *                   type: boolean
- *                   example: false
  *
  *                 criadoEm:
  *                   type: string
@@ -192,13 +197,13 @@ const medicamentoService = require("../services/medicamentoService")
  *                 value:
  *                   erro: Frequência inválida
  *
- *               categoriaInvalida:
- *                 summary: Categoria inválida
+ *               primeiraDoseInvalida:
+ *                 summary: Primeira dose inválida
  *                 value:
- *                   erro: Categoria inválida
+ *                   erro: primeiraDoseEm inválida
  *
  *               familiarSemPaciente:
- *                 summary: Familiar não vinculado a paciente
+ *                 summary: Familiar não vinculado
  *                 value:
  *                   erro: Familiar não vinculado a paciente
  *
@@ -224,10 +229,10 @@ const medicamentoService = require("../services/medicamentoService")
  */
 router.post("/", auth, checkRole(["familiar"]), async (req, res) => {
   try {
-    let { nome, dosagem,categoria,dosePorUso, frequencia, estoque, estoqueMinimo, observacao } = req.body
+    let { nome, dosagem,categoria,dosePorUso, frequencia,primeiraDoseEm, estoque, estoqueMinimo, observacao } = req.body
 
-    if (!nome || !dosagem || !dosePorUso || !frequencia || !categoria || !estoque || !estoqueMinimo || !observacao) {
-      return res.status(400).json({ erro: "Campos obrigatórios: nome, dosagem, dosePorUso, frequencia, categoria, estoque, estoque minimo, observacao" })
+    if (!nome || !dosagem || !dosePorUso || !frequencia ||!primeiraDoseEm || !categoria || !estoque || !estoqueMinimo || !observacao) {
+      return res.status(400).json({ erro: "Campos obrigatórios: nome, dosagem, dosePorUso, frequencia,primeiraDoseEm, categoria, estoque, estoque minimo, observacao" })
     }
 
     frequencia = Number(frequencia)
@@ -236,6 +241,14 @@ router.post("/", auth, checkRole(["familiar"]), async (req, res) => {
       return res.status(400).json({ erro: "Frequência inválida" })
     }
 
+    // valida primeira dose
+    const dataPrimeiraDose = new Date(primeiraDoseEm)
+
+    if (isNaN(dataPrimeiraDose.getTime())) {
+      return res.status(400).json({
+        erro: "primeiraDoseEm inválida"
+      })
+    }
     const userDoc = await db.collection("usuarios").doc(req.user.uid).get()
 
     if (!userDoc.exists) {
@@ -256,6 +269,8 @@ router.post("/", auth, checkRole(["familiar"]), async (req, res) => {
         dosePorUso,
         categoria,
         frequencia,
+        primeiraDoseEm: dataPrimeiraDose,
+        ultimoTomadoEm: dataPrimeiraDose,
         estoque,
         estoqueMinimo,
         observacao,
