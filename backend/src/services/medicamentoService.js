@@ -105,7 +105,7 @@ exports.listarPorUsuario = async (uid) => {
 }
 
 // atualizar
-exports.atualizarMedicamento = async (id, data) => {
+exports.atualizarMedicamento = async (id, data) => { // para atualizar nome, dosagem, categoria, frequencia, estoque, estoqueMinimo, observação
   await db.collection("medicamentos").doc(id).update(data)
 }
 

@@ -1,9 +1,9 @@
-const router = require("express").Router()
-const auth = require("../middlewares/auth")
-const checkRole = require("../middlewares/permissao")
-const { db } = require("../config/firebase")
-const { gerarHorarios } = require("../utils/horarios")
-const medicamentoService = require("../services/medicamentoService")
+const router = require("express").Router();
+const auth = require("../middlewares/auth");
+const checkRole = require("../middlewares/permissao");
+const { db } = require("../config/firebase");
+const { gerarHorarios } = require("../utils/horarios");
+const medicamentoService = require("../services/medicamentoService");
 
 /**
  * @swagger
@@ -16,20 +16,17 @@ const medicamentoService = require("../services/medicamentoService")
  * @swagger
  * /medicamentos:
  *   post:
- *     summary: Cadastrar medicamento
+ *     summary: Cadastra um novo medicamento
  *     description: |
- *       Cadastra um novo medicamento para o paciente vinculado ao familiar logado.
+ *       Permite que um usuário do tipo **familiar** cadastre um medicamento
+ *       para o paciente vinculado.
  *
- *       A lógica das próximas doses será calculada com base em:
- *       - primeiraDoseEm
- *       - frequencia
- *
- *       Exemplo:
- *       - primeiraDoseEm = 08:00
- *       - frequencia = 8 horas
- *
- *       Próximas doses:
- *       08:00 → 16:00 → 00:00 → 08:00
+ *       O sistema:
+ *       - valida frequência da medicação;
+ *       - valida data da primeira dose;
+ *       - cria horários automáticos;
+ *       - registra estoque e controle de doses;
+ *       - associa o medicamento ao paciente vinculado.
  *
  *     tags:
  *       - Medicamentos
@@ -43,12 +40,11 @@ const medicamentoService = require("../services/medicamentoService")
  *         application/json:
  *           schema:
  *             type: object
- *
  *             required:
  *               - nome
  *               - dosagem
- *               - dosePorUso
  *               - categoria
+ *               - dosePorUso
  *               - frequencia
  *               - primeiraDoseEm
  *               - estoque
@@ -64,53 +60,44 @@ const medicamentoService = require("../services/medicamentoService")
  *
  *               dosagem:
  *                 type: string
- *                 description: Dosagem/apresentação do medicamento
+ *                 description: Dosagem do medicamento
  *                 example: 500mg
- *
- *               dosePorUso:
- *                 type: number
- *                 description: Quantidade consumida por dose
- *                 example: 1
  *
  *               categoria:
  *                 type: string
- *                 description: Categoria do medicamento
- *                 enum:
- *                   - Comprimido
- *                   - Cápsula
- *                   - Gotas
- *                   - Xarope
- *                   - Injeção
- *                   - Pomada
- *                 example: Comprimido
+ *                 description: Categoria/formato do medicamento
+ *                 example: comprimido
+ *
+ *               dosePorUso:
+ *                 type: number
+ *                 description: Quantidade utilizada por dose
+ *                 example: 1
  *
  *               frequencia:
  *                 type: number
- *                 description: Frequência em horas entre doses
+ *                 description: Frequência em horas entre as doses
  *                 example: 8
  *
  *               primeiraDoseEm:
  *                 type: string
  *                 format: date-time
- *                 description: |
- *                   Data/hora da primeira dose.
- *                   Utilizada como base para calcular todas as próximas doses.
- *                 example: 2026-05-12T08:00:00.000Z
+ *                 description: Data e horário da primeira dose
+ *                 example: "2026-05-12T08:00:00.000Z"
  *
  *               estoque:
  *                 type: number
- *                 description: Quantidade disponível no estoque
- *                 example: 30
+ *                 description: Quantidade disponível em estoque
+ *                 example: 20
  *
  *               estoqueMinimo:
  *                 type: number
- *                 description: Quantidade mínima para alerta
+ *                 description: Quantidade mínima para alerta de estoque baixo
  *                 example: 5
  *
  *               observacao:
  *                 type: string
- *                 description: Observações do medicamento
- *                 example: Tomar após alimentação
+ *                 description: Observações sobre o medicamento
+ *                 example: Tomar após as refeições
  *
  *     responses:
  *
@@ -120,12 +107,11 @@ const medicamentoService = require("../services/medicamentoService")
  *           application/json:
  *             schema:
  *               type: object
- *
  *               properties:
  *
  *                 id:
  *                   type: string
- *                   example: abc123xyz
+ *                   example: a1b2c3d4
  *
  *                 nome:
  *                   type: string
@@ -137,49 +123,15 @@ const medicamentoService = require("../services/medicamentoService")
  *
  *                 categoria:
  *                   type: string
- *                   example: Comprimido
- *
- *                 dosePorUso:
- *                   type: number
- *                   example: 1
+ *                   example: comprimido
  *
  *                 frequencia:
  *                   type: number
  *                   example: 8
  *
- *                 primeiraDoseEm:
- *                   type: string
- *                   format: date-time
- *                   example: 2026-05-12T08:00:00.000Z
- *
- *                 ultimoTomadoEm:
- *                   type: string
- *                   format: date-time
- *                   example: 2026-05-12T08:00:00.000Z
- *
  *                 estoque:
  *                   type: number
- *                   example: 30
- *
- *                 estoqueMinimo:
- *                   type: number
- *                   example: 5
- *
- *                 observacao:
- *                   type: string
- *                   example: Tomar após alimentação
- *
- *                 pacienteId:
- *                   type: string
- *                   example: pacienteUid123
- *
- *                 uid:
- *                   type: string
- *                   example: familiarUid123
- *
- *                 criadoEm:
- *                   type: string
- *                   format: date-time
+ *                   example: 20
  *
  *       400:
  *         description: Dados inválidos
@@ -188,30 +140,34 @@ const medicamentoService = require("../services/medicamentoService")
  *             examples:
  *
  *               camposObrigatorios:
- *                 summary: Campos obrigatórios ausentes
  *                 value:
- *                   erro: Campos obrigatórios
+ *                   erro: Campos obrigatórios: nome, dosagem, dosePorUso, frequencia,primeiraDoseEm, categoria, estoque, estoque minimo, observacao
  *
  *               frequenciaInvalida:
- *                 summary: Frequência inválida
  *                 value:
  *                   erro: Frequência inválida
  *
  *               primeiraDoseInvalida:
- *                 summary: Primeira dose inválida
  *                 value:
  *                   erro: primeiraDoseEm inválida
  *
  *               familiarSemPaciente:
- *                 summary: Familiar não vinculado
  *                 value:
  *                   erro: Familiar não vinculado a paciente
  *
  *       401:
- *         description: Token inválido ou ausente
+ *         description: Token inválido ou não enviado
+ *         content:
+ *           application/json:
+ *             example:
+ *               erro: Token inválido
  *
  *       403:
  *         description: Usuário sem permissão
+ *         content:
+ *           application/json:
+ *             example:
+ *               erro: Acesso negado
  *
  *       404:
  *         description: Usuário não encontrado
@@ -229,64 +185,87 @@ const medicamentoService = require("../services/medicamentoService")
  */
 router.post("/", auth, checkRole(["familiar"]), async (req, res) => {
   try {
-    let { nome, dosagem,categoria,dosePorUso, frequencia,primeiraDoseEm, estoque, estoqueMinimo, observacao } = req.body
+    let {
+      nome,
+      dosagem,
+      categoria,
+      dosePorUso,
+      frequencia,
+      primeiraDoseEm,
+      estoque,
+      estoqueMinimo,
+      observacao,
+    } = req.body;
 
-    if (!nome || !dosagem || !dosePorUso || !frequencia ||!primeiraDoseEm || !categoria || !estoque || !estoqueMinimo || !observacao) {
-      return res.status(400).json({ erro: "Campos obrigatórios: nome, dosagem, dosePorUso, frequencia,primeiraDoseEm, categoria, estoque, estoque minimo, observacao" })
+    if (
+      !nome ||
+      !dosagem ||
+      !dosePorUso ||
+      !frequencia ||
+      !primeiraDoseEm ||
+      !categoria ||
+      !estoque ||
+      !estoqueMinimo ||
+      !observacao
+    ) {
+      return res
+        .status(400)
+        .json({
+          erro: "Campos obrigatórios: nome, dosagem, dosePorUso, frequencia,primeiraDoseEm, categoria, estoque, estoque minimo, observacao",
+        });
     }
 
-    frequencia = Number(frequencia)
+    frequencia = Number(frequencia);
 
     if (isNaN(frequencia) || frequencia <= 0 || frequencia > 24) {
-      return res.status(400).json({ erro: "Frequência inválida" })
+      return res.status(400).json({ erro: "Frequência inválida" });
     }
 
     // valida primeira dose
-    const dataPrimeiraDose = new Date(primeiraDoseEm)
+    const dataPrimeiraDose = new Date(primeiraDoseEm);
 
     if (isNaN(dataPrimeiraDose.getTime())) {
       return res.status(400).json({
-        erro: "primeiraDoseEm inválida"
-      })
+        erro: "primeiraDoseEm inválida",
+      });
     }
-    const userDoc = await db.collection("usuarios").doc(req.user.uid).get()
+    const userDoc = await db.collection("usuarios").doc(req.user.uid).get();
 
     if (!userDoc.exists) {
-      return res.status(404).json({ erro: "Usuário não encontrado" })
+      return res.status(404).json({ erro: "Usuário não encontrado" });
     }
 
-    const user = userDoc.data()
+    const user = userDoc.data();
 
     if (!user.pacienteId) {
-      return res.status(400).json({ erro: "Familiar não vinculado a paciente" })
+      return res
+        .status(400)
+        .json({ erro: "Familiar não vinculado a paciente" });
     }
 
+    const medicamento = await medicamentoService.criarMedicamento({
+      nome,
+      dosagem,
+      dosePorUso,
+      categoria,
+      frequencia,
+      primeiraDoseEm: dataPrimeiraDose,
+      ultimoTomadoEm: dataPrimeiraDose,
+      estoque,
+      estoqueMinimo,
+      observacao,
 
-     const medicamento =
-      await medicamentoService.criarMedicamento({
-        nome,
-        dosagem,
-        dosePorUso,
-        categoria,
-        frequencia,
-        primeiraDoseEm: dataPrimeiraDose,
-        ultimoTomadoEm: dataPrimeiraDose,
-        estoque,
-        estoqueMinimo,
-        observacao,
+      pacienteId: user.pacienteId,
 
-        pacienteId: user.pacienteId,
+      uid: req.user.uid,
+    });
 
-        uid: req.user.uid
-      })
-
-    return res.status(201).json(medicamento)
-
+    return res.status(201).json(medicamento);
   } catch (err) {
-    console.log(err)
-    return res.status(500).json({ erro: "Erro ao cadastrar medicamento" })
+    console.log(err);
+    return res.status(500).json({ erro: "Erro ao cadastrar medicamento" });
   }
-})
+});
 
 /**
  * @swagger
@@ -302,44 +281,40 @@ router.post("/", auth, checkRole(["familiar"]), async (req, res) => {
  */
 router.get("/status", auth, async (req, res) => {
   try {
-    const userDoc = await db.collection("usuarios").doc(req.user.uid).get()
+    const userDoc = await db.collection("usuarios").doc(req.user.uid).get();
 
     if (!userDoc.exists) {
-      return res.status(404).json({ erro: "Usuário não encontrado" })
+      return res.status(404).json({ erro: "Usuário não encontrado" });
     }
 
-    const user = userDoc.data()
+    const user = userDoc.data();
 
     const pacienteId =
-      user.tipo === "paciente"
-        ? req.user.uid
-        : user.pacienteId
+      user.tipo === "paciente" ? req.user.uid : user.pacienteId;
 
     if (!pacienteId) {
-      return res.status(400).json({ erro: "Paciente não definido" })
+      return res.status(400).json({ erro: "Paciente não definido" });
     }
 
     const snapshot = await db
       .collection("medicamentos")
       .where("pacienteId", "==", pacienteId)
-      .get()
+      .get();
 
-    const tomados = []
-    const pendentes = []
+    const tomados = [];
+    const pendentes = [];
 
-    snapshot.forEach(doc => {
-      const data = { id: doc.id, ...doc.data() }
-      data.tomado ? tomados.push(data) : pendentes.push(data)
-    })
+    snapshot.forEach((doc) => {
+      const data = { id: doc.id, ...doc.data() };
+      data.tomado ? tomados.push(data) : pendentes.push(data);
+    });
 
-    return res.json({ tomados, pendentes })
-
+    return res.json({ tomados, pendentes });
   } catch (err) {
-    console.log(err)
-    return res.status(500).json({ erro: "Erro ao buscar medicamentos" })
+    console.log(err);
+    return res.status(500).json({ erro: "Erro ao buscar medicamentos" });
   }
-})
-
+});
 
 /**
  * @swagger
@@ -432,28 +407,27 @@ router.get("/status", auth, async (req, res) => {
  */
 router.put("/:id", auth, checkRole(["familiar"]), async (req, res) => {
   try {
-    const userDoc = await db.collection("usuarios").doc(req.user.uid).get()
-    const user = userDoc.data()
+    const userDoc = await db.collection("usuarios").doc(req.user.uid).get();
+    const user = userDoc.data();
 
-    const ref = db.collection("medicamentos").doc(req.params.id)
-    const doc = await ref.get()
+    const ref = db.collection("medicamentos").doc(req.params.id);
+    const doc = await ref.get();
 
     if (!doc.exists) {
-      return res.status(404).json({ erro: "Medicamento não encontrado" })
+      return res.status(404).json({ erro: "Medicamento não encontrado" });
     }
 
     if (doc.data().pacienteId !== user.pacienteId) {
-      return res.status(403).json({ erro: "Sem permissão" })
+      return res.status(403).json({ erro: "Sem permissão" });
     }
 
-    await ref.update(req.body)
+    await ref.update(req.body);
 
-    return res.json({ mensagem: "Atualizado com sucesso" })
-
+    return res.json({ mensagem: "Atualizado com sucesso" });
   } catch (err) {
-    return res.status(500).json({ erro: "Erro ao atualizar" })
+    return res.status(500).json({ erro: "Erro ao atualizar" });
   }
-})
+});
 
 /**
  * @swagger
@@ -491,55 +465,54 @@ router.put("/:id", auth, checkRole(["familiar"]), async (req, res) => {
 
 router.delete("/:id", auth, async (req, res) => {
   try {
-    const ref = db.collection("medicamentos").doc(req.params.id)
-    const doc = await ref.get()
+    const ref = db.collection("medicamentos").doc(req.params.id);
+    const doc = await ref.get();
 
     if (!doc.exists) {
-      return res.status(404).json({ erro: "Medicamento não encontrado" })
+      return res.status(404).json({ erro: "Medicamento não encontrado" });
     }
 
-    const data = doc.data()
+    const data = doc.data();
 
     //busca paciente
-    const pacienteId = data.pacienteId
+    const pacienteId = data.pacienteId;
 
     if (!pacienteId) {
-      return res.status(400).json({ erro: "Medicamento sem pacienteId" })
+      return res.status(400).json({ erro: "Medicamento sem pacienteId" });
     }
 
     // usuário logado
-    const userId = req.user.uid
+    const userId = req.user.uid;
 
     // busca paciente no banco
-    const pacienteDoc = await db.collection("usuarios").doc(pacienteId).get()
+    const pacienteDoc = await db.collection("usuarios").doc(pacienteId).get();
 
     if (!pacienteDoc.exists) {
-      return res.status(404).json({ erro: "Paciente não encontrado" })
+      return res.status(404).json({ erro: "Paciente não encontrado" });
     }
 
-    const paciente = pacienteDoc.data()
+    const paciente = pacienteDoc.data();
 
     // regra de permissão
     const podeDeletar =
       userId === pacienteId || // paciente dono
-      userId === paciente.familiarId // familiar vinculado
+      userId === paciente.familiarId; // familiar vinculado
 
     if (!podeDeletar) {
-      return res.status(403).json({ erro: "Sem permissão" })
+      return res.status(403).json({ erro: "Sem permissão" });
     }
 
     // deleta medicamento
-    await ref.delete()
+    await ref.delete();
 
     return res.json({
-      mensagem: "Medicamento deletado com sucesso"
-    })
-
+      mensagem: "Medicamento deletado com sucesso",
+    });
   } catch (err) {
-    console.log(err)
-    return res.status(500).json({ erro: "Erro ao deletar medicamento" })
+    console.log(err);
+    return res.status(500).json({ erro: "Erro ao deletar medicamento" });
   }
-})
+});
 
 /**
  * @swagger
@@ -712,72 +685,71 @@ router.get("/:id/historico", auth, async (req, res) => {
  */
 router.patch("/:id/tomei", auth, async (req, res) => {
   try {
-    const ref = db.collection("medicamentos").doc(req.params.id)
-    const doc = await ref.get()
+    const ref = db.collection("medicamentos").doc(req.params.id);
+    const doc = await ref.get();
 
     if (!doc.exists) {
-      return res.status(404).json({ erro: "Medicamento não encontrado" })
+      return res.status(404).json({ erro: "Medicamento não encontrado" });
     }
 
-    const data = doc.data()
+    const data = doc.data();
 
     //busca usuário logado
-    const userDoc = await db.collection("usuarios").doc(req.user.uid).get()
-    const user = userDoc.data()
+    const userDoc = await db.collection("usuarios").doc(req.user.uid).get();
+    const user = userDoc.data();
 
     //regra de permissão
-    const ehPaciente = data.pacienteId === req.user.uid
-    const ehFamiliarDoPaciente = user?.pacienteId === data.pacienteId
+    const ehPaciente = data.pacienteId === req.user.uid;
+    const ehFamiliarDoPaciente = user?.pacienteId === data.pacienteId;
 
     if (!ehPaciente && !ehFamiliarDoPaciente) {
-      return res.status(403).json({ erro: "Sem permissão" })
+      return res.status(403).json({ erro: "Sem permissão" });
     }
 
-    const agora = new Date()
-    const hoje = new Date().toISOString().split("T")[0]
+    const agora = new Date();
+    const hoje = new Date().toISOString().split("T")[0];
 
-    const historico = data.historico || []
-    const freqMs = (data.frequencia || 1) * 60 * 60 * 1000
+    const historico = data.historico || [];
+    const freqMs = (data.frequencia || 1) * 60 * 60 * 1000;
 
     // encontra o horário previsto mais próximo
     let horarioBase = data.ultimoTomadoEm
       ? data.ultimoTomadoEm.toDate()
-      : new Date(agora.getTime() - freqMs)
+      : new Date(agora.getTime() - freqMs);
 
-    let horarioPrevisto = new Date(horarioBase)
+    let horarioPrevisto = new Date(horarioBase);
 
     while (horarioPrevisto < agora) {
-      horarioPrevisto = new Date(horarioPrevisto.getTime() + freqMs)
+      horarioPrevisto = new Date(horarioPrevisto.getTime() + freqMs);
     }
 
     // volta um passo pra pegar o horário correto
-    horarioPrevisto = new Date(horarioPrevisto.getTime() - freqMs)
+    horarioPrevisto = new Date(horarioPrevisto.getTime() - freqMs);
 
     // atualiza histórico (evita duplicar)
     const historicoAtualizado = historico.filter(
-      (h) => h.horarioPrevisto !== horarioPrevisto.toISOString()
-    )
+      (h) => h.horarioPrevisto !== horarioPrevisto.toISOString(),
+    );
 
     historicoAtualizado.push({
       horarioPrevisto: horarioPrevisto.toISOString(),
       dataRegistro: agora.toISOString(),
-      status: "tomado"
-    })
-// atualiza medicamento
+      status: "tomado",
+    });
+    // atualiza medicamento
     await ref.update({
-      estoque: Math.max((data.estoque || 0) -
-      (data.dosePorUso || 1), 0),
+      estoque: Math.max((data.estoque || 0) - (data.dosePorUso || 1), 0),
       tomadasHoje: [...(data.tomadasHoje || []), hoje],
       ultimoTomadoEm: agora,
       historico: historicoAtualizado,
       ultimoHorarioNotificado: null,
       ultimoHorarioAtrasado: null,
-    })
-        return res.json({ mensagem: "Medicamento tomado com sucesso" })
+    });
+    return res.json({ mensagem: "Medicamento tomado com sucesso" });
   } catch (err) {
-    console.log(err)
-    return res.status(500).json({ erro: "Erro ao confirmar medicamento" })
+    console.log(err);
+    return res.status(500).json({ erro: "Erro ao confirmar medicamento" });
   }
-})
+});
 
-module.exports = router
+module.exports = router;
