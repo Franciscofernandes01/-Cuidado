@@ -8,9 +8,7 @@ const { db } = require("../config/firebase")
 
 const admin = require("firebase-admin")
 
-const {
-  enviarNotificacao
-} = require("../services/notificationService")
+const { enviarNotificacao } = require("../services/notificationService");
 
 /**
  * @swagger
@@ -20,10 +18,17 @@ const {
  */
 
 /**
+ * =========================================================
+ * TESTE PUSH SIMPLES
+ * =========================================================
+ */
+
+/**
  * @swagger
  * /dev/notificacoes/teste:
  *   post:
  *     summary: Enviar push simples para o usuário logado
+ *     description: Testa se o Firebase Cloud Messaging está funcionando no dispositivo autenticado
  *     tags: [Dev]
  *     security:
  *       - bearerAuth: []
@@ -105,10 +110,17 @@ router.post(
 )
 
 /**
+ * =========================================================
+ * TESTE PUSH CUSTOMIZADO
+ * =========================================================
+ */
+
+/**
  * @swagger
  * /dev/push/custom:
  *   post:
  *     summary: Enviar push customizado
+ *     description: Permite enviar um push manual para qualquer token FCM
  *     tags: [Dev]
  *     security:
  *       - bearerAuth: []
@@ -205,10 +217,17 @@ router.post(
 )
 
 /**
+ * =========================================================
+ * TESTE ALERTAS MEDICAMENTO
+ * =========================================================
+ */
+
+/**
  * @swagger
  * /dev/medicamentos/{id}/notificacao:
  *   post:
  *     summary: Disparar notificação manual do medicamento
+ *     description: Simula os alertas do cron (hora, atrasado e crítico)
  *     tags: [Dev]
  *     security:
  *       - bearerAuth: []
@@ -296,8 +315,16 @@ router.post(
         }
       }
 
+      if (tokens.length === 0) {
+
+        return res.status(400).json({
+          erro: "Nenhum token FCM encontrado"
+        })
+      }
+
       let titulo = ""
       let mensagem = ""
+      let type = ""
 
       if (tipo === "hora") {
 
@@ -306,12 +333,16 @@ router.post(
         mensagem =
           `Está na hora de tomar ${med.nome}`
 
+        type = "medicine"
+
       } else if (tipo === "atrasado") {
 
         titulo = "Medicamento atrasado"
 
         mensagem =
-          `${med.nome} está atrasado`
+          `${med.nome} está atrasado há mais de 10 minutos`
+
+        type = "medicine"
 
       } else if (tipo === "critico") {
 
@@ -319,7 +350,9 @@ router.post(
           "Medicamento não confirmado"
 
         mensagem =
-          `${med.nome} não foi confirmado`
+          `${med.nome} não foi confirmado há mais de 30 minutos`
+
+        type = "medicine_critical"
 
       } else {
 
@@ -330,37 +363,49 @@ router.post(
 
       for (const token of tokens) {
 
-        await admin.messaging().send({
+        try {
 
-          token,
+          await admin.messaging().send({
 
-          notification: {
-            title: titulo,
-            body: mensagem
-          },
+            token,
 
-          data: {
-            type: tipo,
-            medicineName: med.nome
-          },
+            notification: {
+              title: titulo,
+              body: mensagem
+            },
 
-          android: {
-            priority: "high"
-          },
+            data: {
+              type,
+              medicineName: med.nome,
+              medicineDose: med.dosagem || "",
+              title: titulo,
+              body: mensagem
+            },
 
-          apns: {
-            payload: {
-              aps: {
-                sound: "default",
-                badge: 1
+            android: {
+              priority: "high"
+            },
+
+            apns: {
+              payload: {
+                aps: {
+                  sound: "default",
+                  badge: 1
+                }
               }
             }
-          }
-        })
+          })
+
+        } catch (err) {
+
+          console.log("Erro token:", err.code)
+        }
       }
 
       return res.json({
-        mensagem: "Notificação enviada"
+        mensagem: "Notificação enviada",
+        tipo,
+        medicamento: med.nome
       })
 
     } catch (err) {
@@ -375,10 +420,17 @@ router.post(
 )
 
 /**
+ * =========================================================
+ * SIMULAR ATRASO
+ * =========================================================
+ */
+
+/**
  * @swagger
  * /dev/medicamentos/{id}/simular-atraso:
  *   patch:
  *     summary: Simular atraso da dose
+ *     description: Altera o ultimoTomadoEm para testar o cron automaticamente
  *     tags: [Dev]
  *     security:
  *       - bearerAuth: []
@@ -431,11 +483,25 @@ router.patch(
         })
       }
 
+      const med = doc.data()
+
+      if (!med.frequencia) {
+
+        return res.status(400).json({
+          erro: "Medicamento sem frequência"
+        })
+      }
+
       const agora = new Date()
 
       const novaData = new Date(
         agora.getTime() -
-        (Number(minutos) * 60 * 1000)
+        (
+          (
+            med.frequencia * 60 +
+            Number(minutos)
+          ) * 60 * 1000
+        )
       )
 
       await ref.update({
@@ -446,7 +512,16 @@ router.patch(
 
         mensagem: "Atraso simulado",
 
-        ultimoTomadoEm: novaData
+        medicamento: med.nome,
+
+        frequenciaHoras: med.frequencia,
+
+        minutosAtraso: minutos,
+
+        ultimoTomadoEm: novaData,
+
+        observacao:
+          "O cron irá identificar automaticamente o atraso"
       })
 
     } catch (err) {
@@ -461,10 +536,17 @@ router.patch(
 )
 
 /**
+ * =========================================================
+ * RESET ALERTAS
+ * =========================================================
+ */
+
+/**
  * @swagger
  * /dev/medicamentos/{id}/reset-alertas:
  *   patch:
  *     summary: Resetar alertas anti-spam
+ *     description: Permite reenviar notificações do cron para a mesma dose
  *     tags: [Dev]
  *     security:
  *       - bearerAuth: []
@@ -528,10 +610,17 @@ router.patch(
 )
 
 /**
+ * =========================================================
+ * STATUS DA DOSE
+ * =========================================================
+ */
+
+/**
  * @swagger
  * /dev/medicamentos/{id}/status-dose:
  *   get:
  *     summary: Buscar status da dose
+ *     description: Mostra como o cron interpreta o medicamento atualmente
  *     tags: [Dev]
  *     security:
  *       - bearerAuth: []
@@ -601,9 +690,36 @@ router.get(
 
       const diff = agora - proximaDose
 
+      let status = "aguardando"
+
+      if (
+        diff >= 0 &&
+        diff < 5 * 60 * 1000
+      ) {
+
+        status = "hora"
+
+      } else if (
+        diff >= 10 * 60 * 1000 &&
+        diff < 30 * 60 * 1000
+      ) {
+
+        status = "atrasado"
+
+      } else if (
+        diff >= 30 * 60 * 1000
+      ) {
+
+        status = "critico"
+      }
+
       return res.json({
 
         medicamento: med.nome,
+
+        frequenciaHoras: med.frequencia,
+
+        ultimoTomadoEm: ultimo,
 
         proximaDose,
 
@@ -611,6 +727,8 @@ router.get(
           diff > 0
             ? Math.floor(diff / 60000)
             : 0,
+
+        status,
 
         atrasado:
           diff >= 10 * 60 * 1000,
@@ -625,6 +743,212 @@ router.get(
 
       return res.status(500).json({
         erro: "Erro ao buscar status"
+      })
+    }
+  }
+)
+
+/**
+ * =========================================================
+ * SIMULAR OFFLINE
+ * =========================================================
+ */
+
+/**
+ * @swagger
+ * /dev/paciente/simular-offline:
+ *   patch:
+ *     summary: Simular paciente offline
+ *     description: Faz o cron entender que o paciente está offline há mais de 30 minutos
+ *     tags: [Dev]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Offline simulado
+ *       404:
+ *         description: Usuário não encontrado
+ *       500:
+ *         description: Erro interno
+ */
+router.patch(
+  "/paciente/simular-offline",
+  auth,
+  async (req, res) => {
+
+    try {
+
+      const ref = db
+        .collection("usuarios")
+        .doc(req.user.uid)
+
+      const userDoc = await ref.get()
+
+      if (!userDoc.exists) {
+
+        return res.status(404).json({
+          erro: "Usuário não encontrado"
+        })
+      }
+
+      const dataOffline = new Date(
+        Date.now() - (31 * 60 * 1000)
+      )
+
+      await ref.update({
+        ultimoOnline: dataOffline,
+        alertaOfflineEnviado: null
+      })
+
+      return res.json({
+        mensagem: "Paciente offline simulado",
+        ultimoOnline: dataOffline
+      })
+
+    } catch (err) {
+
+      console.log(err)
+
+      return res.status(500).json({
+        erro: "Erro ao simular offline"
+      })
+    }
+  }
+)
+
+/**
+ * =========================================================
+ * SIMULAR BATERIA BAIXA
+ * =========================================================
+ */
+
+/**
+ * @swagger
+ * /dev/paciente/simular-bateria:
+ *   patch:
+ *     summary: Simular bateria baixa
+ *     description: Faz o cron identificar bateria crítica
+ *     tags: [Dev]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               bateria:
+ *                 type: number
+ *                 example: 15
+ *     responses:
+ *       200:
+ *         description: Bateria alterada
+ *       500:
+ *         description: Erro interno
+ */
+router.patch(
+  "/paciente/simular-bateria",
+  auth,
+  async (req, res) => {
+
+    try {
+
+      const bateria =
+        Number(req.body.bateria || 15)
+
+      await db
+        .collection("usuarios")
+        .doc(req.user.uid)
+        .update({
+          bateria,
+          alertaBateriaEnviado: null
+        })
+
+      return res.json({
+        mensagem: "Bateria simulada",
+        bateria
+      })
+
+    } catch (err) {
+
+      console.log(err)
+
+      return res.status(500).json({
+        erro: "Erro ao simular bateria"
+      })
+    }
+  }
+)
+
+/**
+ * =========================================================
+ * SIMULAR ESTOQUE BAIXO
+ * =========================================================
+ */
+
+/**
+ * @swagger
+ * /dev/medicamentos/{id}/simular-estoque:
+ *   patch:
+ *     summary: Simular estoque baixo
+ *     description: Faz o cron identificar estoque mínimo
+ *     tags: [Dev]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         example: medicamento123
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               estoque:
+ *                 type: number
+ *                 example: 1
+ *     responses:
+ *       200:
+ *         description: Estoque alterado
+ *       500:
+ *         description: Erro interno
+ */
+router.patch(
+  "/medicamentos/:id/simular-estoque",
+  auth,
+  async (req, res) => {
+
+    try {
+
+      const estoque =
+        Number(req.body.estoque || 1)
+
+      const ref = db
+        .collection("medicamentos")
+        .doc(req.params.id)
+
+      await ref.update({
+        estoque,
+        alertaEstoqueEnviado: null
+      })
+
+      return res.json({
+        mensagem: "Estoque simulado",
+        estoque
+      })
+
+    } catch (err) {
+
+      console.log(err)
+
+      return res.status(500).json({
+        erro: "Erro ao simular estoque"
       })
     }
   }

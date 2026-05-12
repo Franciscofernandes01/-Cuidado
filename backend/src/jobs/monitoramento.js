@@ -243,368 +243,307 @@ const { enviarNotificacao } = require("../services/notificationService");
 const admin = require("firebase-admin");
 
 if (process.env.NODE_ENV !== "test") {
+  cron.schedule("* * * * *", async () => {
+    console.log("Verificando por usuários...");
 
-cron.schedule("* * * * *", async () => {
+    const agora = new Date();
+    const hoje = agora.toISOString().split("T")[0];
 
-  console.log("Verificando por usuários...");
+    try {
+      const usuariosSnap = await db.collection("usuarios").get();
 
-  const agora = new Date();
-  const hoje = agora.toISOString().split("T")[0];
+      for (const userDoc of usuariosSnap.docs) {
+        const user = userDoc.data();
+        const userId = userDoc.id;
 
-  try {
+        if (user.tipo !== "paciente") continue;
 
-    const usuariosSnap =
-      await db.collection("usuarios").get();
+        // ================= TOKENS =================
 
-    for (const userDoc of usuariosSnap.docs) {
+        let tokens = [];
 
-      const user = userDoc.data();
-      const userId = userDoc.id;
-
-      if (user.tipo !== "paciente") continue;
-
-      // ================= TOKENS =================
-
-      let tokens = [];
-
-      if (user.fcmToken) {
-        tokens.push(user.fcmToken);
-      }
-
-      if (user.familiarId) {
-
-        const famDoc = await db
-          .collection("usuarios")
-          .doc(user.familiarId)
-          .get();
-
-        const familiar = famDoc.data();
-
-        if (familiar?.fcmToken) {
-          tokens.push(familiar.fcmToken);
+        if (user.fcmToken) {
+          tokens.push(user.fcmToken);
         }
-      }
 
-      if (tokens.length === 0) continue;
+        if (user.familiarId) {
+          const famDoc = await db
+            .collection("usuarios")
+            .doc(user.familiarId)
+            .get();
 
-      // ================= STATUS DO PACIENTE =================
+          const familiar = famDoc.data();
 
-      const ultimo = user.ultimoOnline?.toDate?.();
-
-      const agora = new Date();
-
-      const tempoOffline =
-        ultimo ? agora - ultimo : null;
-
-      const offline =
-        tempoOffline &&
-        tempoOffline > 30 * 60 * 1000;
-
-      const bateriaBaixa =
-        (user.bateria ?? 100) <= 20;
-
-      // controle anti-spam
-      const hoje =
-        agora.toISOString().split("T")[0];
-
-      // ================= ALERTA OFFLINE =================
-
-      if (offline) {
-
-        if (user.alertaOfflineEnviado !== hoje) {
-
-          console.log(
-            `Paciente offline: ${user.nome}`
-          );
-
-          for (const token of tokens) {
-
-            await enviarNotificacao(
-              token,
-              "Paciente offline",
-              `${user.nome} está offline há mais de 30 minutos`,
-            );
+          if (familiar?.fcmToken) {
+            tokens.push(familiar.fcmToken);
           }
-
-          await userDoc.ref.update({
-            alertaOfflineEnviado: hoje,
-          });
         }
-      }
 
-      // ================= ALERTA BATERIA =================
+        if (tokens.length === 0) continue;
 
-      if (bateriaBaixa) {
+        // ================= STATUS DO PACIENTE =================
 
-        if (user.alertaBateriaEnviado !== hoje) {
+        const ultimo = user.ultimoOnline?.toDate?.();
 
-          console.log(
-            `Bateria baixa: ${user.nome}`
-          );
+        const agora = new Date();
 
-          for (const token of tokens) {
+        const tempoOffline = ultimo ? agora - ultimo : null;
 
-            await enviarNotificacao(
-              token,
-              "Bateria baixa",
-              `${user.nome} está com bateria em ${user.bateria || 0}%`,
-            );
-          }
+        const offline = tempoOffline && tempoOffline > 30 * 60 * 1000;
 
-          await userDoc.ref.update({
-            alertaBateriaEnviado: hoje,
-          });
-        }
-      }
+        const bateriaBaixa = (user.bateria ?? 100) <= 20;
 
-      // ================= MEDICAMENTOS =================
+        // controle anti-spam
+        const hoje = agora.toISOString().split("T")[0];
 
-      const medsSnap = await db
-        .collection("medicamentos")
-        .where("pacienteId", "==", userId)
-        .get();
+        // ================= ALERTA OFFLINE =================
 
-      for (const doc of medsSnap.docs) {
-
-        const med = doc.data();
-
-        // ================= ESTOQUE =================
-
-        if (
-          (med.estoque ?? 0) <=
-          (med.estoqueMinimo ?? 0)
-        ) {
-
-          if (
-            med.alertaEstoqueEnviado !== hoje
-          ) {
-
-            console.log(
-              `Estoque baixo: ${med.nome}`
-            );
+        if (offline) {
+          if (user.alertaOfflineEnviado !== hoje) {
+            console.log(`Paciente offline: ${user.nome}`);
 
             for (const token of tokens) {
-
               await enviarNotificacao(
                 token,
-                "Estoque baixo!",
-                `O medicamento ${med.nome} está acabando`,
+                "Paciente offline",
+                `${user.nome} está offline há mais de 30 minutos`,
               );
             }
 
-            await doc.ref.update({
-              alertaEstoqueEnviado: hoje,
+            await userDoc.ref.update({
+              alertaOfflineEnviado: hoje,
             });
           }
         }
 
-        // ================= FREQUÊNCIA =================
+        // ================= ALERTA BATERIA =================
 
-        if (
-          !med.frequencia ||
-          !med.ultimoTomadoEm
-        ) continue;
+        if (bateriaBaixa) {
+          if (user.alertaBateriaEnviado !== hoje) {
+            console.log(`Bateria baixa: ${user.nome}`);
 
-        const ultimo =
-          med.ultimoTomadoEm.toDate();
+            for (const token of tokens) {
+              await enviarNotificacao(
+                token,
+                "Bateria baixa",
+                `${user.nome} está com bateria em ${user.bateria || 0}%`,
+              );
+            }
 
-        const freqMs =
-          med.frequencia *
-          60 *
-          60 *
-          1000;
-
-        // calcula horário esperado
-        let horarioDose =
-          new Date(
-            ultimo.getTime() + freqMs
-          );
-
-        // diferença entre agora e horário
-        const diff =
-          agora - horarioDose;
-
-        // ainda não chegou a próxima dose
-        if (diff < 0) continue;
-
-        // identificador único da dose
-        const identificador =
-          horarioDose.toISOString();
-
-        // histórico
-        let historicoAtualizado = [
-          ...(med.historico || [])
-        ];
-
-        let tipoNotificacao = null;
-
-        let titulo = "";
-
-        let mensagem = "";
-
-        // ================= HORA DO REMÉDIO =================
-
-        if (
-          diff >= 0 &&
-          diff < 5 * 60 * 1000 &&
-          med.ultimoHorarioNotificado !== identificador
-        ) {
-
-          tipoNotificacao = "medicine";
-
-          titulo =
-            "Hora do medicamento";
-
-          mensagem =
-            `Está na hora de tomar ${med.nome}`;
+            await userDoc.ref.update({
+              alertaBateriaEnviado: hoje,
+            });
+          }
         }
 
-        // ================= ATRASADO 10 MIN =================
+        // ================= MEDICAMENTOS =================
 
-        else if (
-          diff >= 10 * 60 * 1000 &&
-          diff < 30 * 60 * 1000 &&
-          med.ultimoHorarioAtrasado !== identificador
-        ) {
+        const medsSnap = await db
+          .collection("medicamentos")
+          .where("pacienteId", "==", userId)
+          .get();
 
-          tipoNotificacao = "medicine";
+        for (const doc of medsSnap.docs) {
+          const med = doc.data();
 
-          titulo =
-            "Medicamento atrasado";
+          // ================= ESTOQUE =================
 
-          mensagem =
-            `${med.nome} está atrasado há mais de 10 minutos`;
-        }
+          if ((med.estoque ?? 0) <= (med.estoqueMinimo ?? 0)) {
+            if (med.alertaEstoqueEnviado !== hoje) {
+              console.log(`Estoque baixo: ${med.nome}`);
 
-        // ================= NÃO CONFIRMADO 30 MIN =================
+              for (const token of tokens) {
+                await enviarNotificacao(
+                  token,
+                  "Estoque baixo!",
+                  `O medicamento ${med.nome} está acabando`,
+                );
+              }
 
-        else if (
-          diff >= 30 * 60 * 1000 &&
-          med.ultimoHorarioCritico !== identificador
-        ) {
+              await doc.ref.update({
+                alertaEstoqueEnviado: hoje,
+              });
+            }
+          }
 
-          tipoNotificacao =
-            "medicine_critical";
+          // ================= FREQUÊNCIA =================
 
-          titulo =
-            "Medicamento não confirmado";
+          if (!med.frequencia || !med.ultimoTomadoEm) continue;
 
-          mensagem =
-            `${med.nome} não foi confirmado há mais de 30 minutos`;
-        }
+          const ultimo = med.ultimoTomadoEm.toDate();
 
-        // sem notificação
-        if (!tipoNotificacao) continue;
+          const freqMs = med.frequencia * 60 * 60 * 1000;
 
-        // ================= ENVIA PUSH =================
+          // calcula horário esperado
+          let horarioDose = new Date(ultimo.getTime() + freqMs);
 
-        for (const token of tokens) {
+          // diferença entre agora e horário
+          const diff = agora - horarioDose;
 
-          console.log(
-            "Enviando para:",
-            token
-          );
+          // ainda não chegou a próxima dose
+          if (diff < 0) continue;
 
-          await admin.messaging().send({
+          // identificador único da dose
+          const identificador = horarioDose.toISOString();
 
-            token,
+          // histórico
+          let historicoAtualizado = [...(med.historico || [])];
 
-            notification: {
-              title: titulo,
-              body: mensagem,
-            },
+          let tipoNotificacao = null;
 
-            data: {
+          let titulo = "";
 
-              type: tipoNotificacao,
+          let mensagem = "";
 
-              medicineName: med.nome,
+          // ================= HORA DO REMÉDIO =================
 
-              medicineDose: med.dosagem,
+          if (
+            diff >= 0 &&
+            diff < 5 * 60 * 1000 &&
+            med.ultimoHorarioNotificado !== identificador
+          ) {
+            tipoNotificacao = "medicine";
 
-              title: titulo,
+            titulo = "Hora do medicamento";
 
-              body: mensagem,
-            },
+            mensagem = `Está na hora de tomar ${med.nome}`;
+          }
 
-            android: {
-              priority: "high",
-            },
+          // ================= ATRASADO 10 MIN =================
+          else if (
+            diff >= 10 * 60 * 1000 &&
+            diff < 30 * 60 * 1000 &&
+            med.ultimoHorarioAtrasado !== identificador
+          ) {
+            tipoNotificacao = "medicine";
 
-            apns: {
-              payload: {
-                aps: {
-                  contentAvailable: true,
-                  sound: "default",
-                  badge: 1,
+            titulo = "Medicamento atrasado";
+
+            mensagem = `${med.nome} está atrasado há mais de 10 minutos`;
+          }
+
+          // ================= NÃO CONFIRMADO 30 MIN =================
+          else if (
+            diff >= 30 * 60 * 1000 &&
+            med.ultimoHorarioCritico !== identificador
+          ) {
+            tipoNotificacao = "medicine_critical";
+
+            titulo = "Medicamento não confirmado";
+
+            mensagem = `${med.nome} não foi confirmado há mais de 30 minutos`;
+          }
+
+          // sem notificação
+          if (!tipoNotificacao) continue;
+
+          // ================= ENVIA PUSH =================
+
+          for (const token of tokens) {
+            try {
+              console.log("Enviando para:", token);
+
+              await admin.messaging().send({
+                token,
+
+                notification: {
+                  title: titulo,
+                  body: mensagem,
                 },
-              },
-            },
-          });
-        }
 
-        // ================= HISTÓRICO =================
+                data: {
+                  type: tipoNotificacao,
 
-        historicoAtualizado.push({
+                  medicineName: med.nome,
 
-          horarioPrevisto:
-            identificador,
+                  medicineDose: med.dosagem,
 
-          dataRegistro: agora,
+                  title: titulo,
 
-          status:
-            titulo.includes("atrasado")
+                  body: mensagem,
+                },
+
+                android: {
+                  priority: "high",
+                },
+
+                apns: {
+                  payload: {
+                    aps: {
+                      contentAvailable: true,
+                      sound: "default",
+                      badge: 1,
+                    },
+                  },
+                },
+              });
+            } catch (err) {
+              console.log("Erro ao enviar push:", err.code);
+
+              // token inválido
+              if (err.code === "messaging/registration-token-not-registered") {
+                console.log("Token inválido removido");
+
+                // remove token do paciente
+                if (user.fcmToken === token) {
+                  await userDoc.ref.update({
+                    fcmToken: null,
+                  });
+                }
+
+                // remove token do familiar
+                if (user.familiarId) {
+                  const famRef = db.collection("usuarios").doc(user.familiarId);
+
+                  const famDoc = await famRef.get();
+
+                  const familiar = famDoc.data();
+
+                  if (familiar?.fcmToken === token) {
+                    await famRef.update({
+                      fcmToken: null,
+                    });
+                  }
+                }
+              }
+            }
+          }
+
+          // ================= HISTÓRICO =================
+
+          historicoAtualizado.push({
+            horarioPrevisto: identificador,
+
+            dataRegistro: agora,
+
+            status: titulo.includes("atrasado")
               ? "atrasado"
               : titulo.includes("não confirmado")
-              ? "critico"
-              : "notificado",
-        });
+                ? "critico"
+                : "notificado",
+          });
 
-        // ================= CONTROLE ANTI-SPAM =================
+          // ================= CONTROLE ANTI-SPAM =================
 
-        const updateData = {
+          const updateData = {
+            historico: historicoAtualizado,
+          };
 
-          historico:
-            historicoAtualizado,
-        };
+          if (titulo.includes("não confirmado")) {
+            updateData.ultimoHorarioCritico = identificador;
+          } else if (titulo.includes("atrasado")) {
+            updateData.ultimoHorarioAtrasado = identificador;
+          } else {
+            updateData.ultimoHorarioNotificado = identificador;
+          }
 
-        if (
-          titulo.includes(
-            "não confirmado"
-          )
-        ) {
+          await doc.ref.update(updateData);
 
-          updateData.ultimoHorarioCritico =
-            identificador;
-
-        } else if (
-          titulo.includes("atrasado")
-        ) {
-
-          updateData.ultimoHorarioAtrasado =
-            identificador;
-
-        } else {
-
-          updateData.ultimoHorarioNotificado =
-            identificador;
+          console.log(`Notificação enviada: ${med.nome}`);
         }
-
-        await doc.ref.update(updateData);
-
-        console.log(
-          `Notificação enviada: ${med.nome}`
-        );
       }
+    } catch (err) {
+      console.log("Erro no cron:", err);
     }
-
-  } catch (err) {
-
-    console.log(
-      "Erro no cron:",
-      err
-    );
-  }
-});
-
+  });
 }
