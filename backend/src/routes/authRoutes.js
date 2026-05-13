@@ -13,13 +13,31 @@ const { tempoRelativo } = require("../utils/horarios")
  * @swagger
  * /auth/google:
  *   post:
- *     summary: Login com Google e criação de usuário no primeiro acesso
+ *     summary: Login com Google e criação automática de usuário
  *     description: |
- *       Realiza autenticação via Firebase Google ID Token.
- *       Caso o usuário não exista, ele é criado com o tipo informado (paciente ou familiar).
- *       Também permite atualizar o token de notificação (FCM).
+ *       Realiza autenticação utilizando Firebase Google ID Token.
+ *
+ *       Funcionamento:
+ *
+ *       - No primeiro acesso:
+ *         - cria automaticamente o usuário;
+ *         - exige o campo `tipo`;
+ *         - define permanentemente o perfil da conta.
+ *
+ *       - Nos próximos logins:
+ *         - o tipo salvo é reutilizado;
+ *         - não é permitido trocar o tipo da conta;
+ *         - o FCM Token pode ser atualizado.
+ *
+ *       Regras importantes:
+ *
+ *       - Uma conta criada como `paciente` sempre será `paciente`.
+ *       - Uma conta criada como `familiar` sempre será `familiar`.
+ *       - Para usar outro tipo de acesso é necessário outro e-mail Google.
+ *
  *     tags:
  *       - Autenticação
+ *
  *     requestBody:
  *       required: true
  *       content:
@@ -31,17 +49,27 @@ const { tempoRelativo } = require("../utils/horarios")
  *             properties:
  *               token:
  *                 type: string
- *                 description: Firebase ID Token do Google
+ *                 description: Firebase Google ID Token
  *                 example: eyJhbGciOiJSUzI1NiIsImtpZCI6...
+ *
  *               tipo:
  *                 type: string
- *                 enum: [paciente, familiar]
- *                 description: Tipo do usuário (obrigatório no primeiro acesso)
+ *                 enum:
+ *                   - paciente
+ *                   - familiar
+ *                 description: |
+ *                   Tipo do usuário.
+ *
+ *                   Obrigatório apenas no primeiro acesso.
+ *
+ *                   Após criação da conta, o tipo não pode ser alterado.
  *                 example: paciente
+ *
  *               fcmToken:
  *                 type: string
  *                 description: Token do Firebase Cloud Messaging para notificações push
  *                 example: fcm_token_exemplo_123
+ *
  *     responses:
  *       200:
  *         description: Login realizado com sucesso
@@ -53,30 +81,70 @@ const { tempoRelativo } = require("../utils/horarios")
  *                 mensagem:
  *                   type: string
  *                   example: Login realizado com sucesso
+ *
  *                 uid:
  *                   type: string
- *                   example: uid_do_usuario_firebase
+ *                   example: uid_firebase_usuario
+ *
+ *                 tipo:
+ *                   type: string
+ *                   enum:
+ *                     - paciente
+ *                     - familiar
+ *                   example: paciente
+ *
+ *                 primeiroAcesso:
+ *                   type: boolean
+ *                   description: |
+ *                     Indica se a conta foi criada neste login.
+ *                   example: false
+ *
+ *             examples:
+ *
+ *               primeiroAcesso:
+ *                 summary: Primeiro login com criação da conta
+ *                 value:
+ *                   mensagem: Usuário criado e login realizado com sucesso
+ *                   uid: abc123firebase
+ *                   tipo: paciente
+ *                   primeiroAcesso: true
+ *
+ *               loginNormal:
+ *                 summary: Login de usuário já existente
+ *                 value:
+ *                   mensagem: Login realizado com sucesso
+ *                   uid: abc123firebase
+ *                   tipo: paciente
+ *                   primeiroAcesso: false
  *
  *       400:
- *         description: Erro de validação (token ou tipo inválido)
+ *         description: Erro de validação
  *         content:
  *           application/json:
  *             examples:
- *               TokenFaltando:
+ *
+ *               tokenObrigatorio:
+ *                 summary: Token não enviado
  *                 value:
  *                   erro: Token é obrigatório
- *               TipoInvalido:
+ *
+ *               tipoObrigatorio:
+ *                 summary: Tipo obrigatório no primeiro acesso
  *                 value:
  *                   erro: Tipo é obrigatório no primeiro acesso (paciente ou familiar)
  *
+ *               trocaTipo:
+ *                 summary: Tentativa de trocar tipo da conta
+ *                 value:
+ *                   erro: Esta conta já está registrada como paciente
+ *
  *       401:
- *         description: Token inválido do Firebase
+ *         description: Token inválido
  *         content:
  *           application/json:
  *             example:
  *               erro: Token inválido
  */
-
 // ================= LOGIN GOOGLE =================
 router.post("/google", async (req, res) => {
   try {
@@ -92,7 +160,7 @@ router.post("/google", async (req, res) => {
     const userRef = db.collection("usuarios").doc(uid)
     const userDoc = await userRef.get()
 
-    if (!userDoc.exists) {
+    if (!userDoc.exists) { // primeiro acesso, cria usuário
       if (!tipo || !["paciente", "familiar"].includes(tipo)) {
         return res.status(400).json({
           erro: "Tipo é obrigatório no primeiro acesso (paciente ou familiar)"
@@ -107,17 +175,35 @@ router.post("/google", async (req, res) => {
         criadoEm: new Date(),
         bateria: null,
         online: false,
-        ultimoOnline: null
+        ultimoOnline: null,
+        fcmToken: fcmToken || null
       })
+      return res.json({
+        mensagem: "Usuário criado e login realizado com sucesso",
+        uid,
+        tipo,
+        primeiroAcesso: true
+        })
     }
 
+    const user = userDoc.data()
+
+    //impede troca de tipo em logins futuros
+    if (tipo && tipo !== user.tipo) {
+      return res.status(400).json({
+        erro: `Esta conta já está registrada como ${user.tipo}`
+      })
+    }
+    // atualiza FCM Token a cada login para garantir que o token mais recente seja salvo (importante para notificações push)
     if (fcmToken) {
       await db.collection("usuarios").doc(uid).update({ fcmToken })
     }
 
     return res.json({
       mensagem: "Login realizado com sucesso",
-      uid
+      uid,
+      tipo: user.tipo,
+      primeiroAcesso: false
     })
 
   } catch (err) {
