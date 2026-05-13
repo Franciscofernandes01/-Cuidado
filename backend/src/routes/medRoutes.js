@@ -271,20 +271,115 @@ router.post("/", auth, checkRole(["familiar"]), async (req, res) => {
  * @swagger
  * /medicamentos/status:
  *   get:
- *     summary: Listar medicamentos (tomados e pendentes)
- *     tags: [Medicamentos]
+ *     summary: Listar medicamentos tomados e pendentes
+ *     description: |
+ *       Retorna os medicamentos do paciente separados em:
+ *
+ *       - `tomados`
+ *       - `pendentes`
+ *
+ *       Funcionamento:
+ *
+ *       - Se o usuário autenticado for do tipo `paciente`,
+ *         a busca é feita pelo próprio UID.
+ *
+ *       - Se for do tipo `familiar`,
+ *         a busca utiliza o `pacienteId` vinculado.
+ *
+ *       Todas as datas são retornadas em formato ISO 8601.
+ *
+ *       Exemplo:
+ *       `2026-05-13T08:00:00.000Z`
+ *
+ *     tags:
+ *       - Medicamentos
+ *
  *     security:
  *       - bearerAuth: []
+ *
  *     responses:
  *       200:
- *         description: Lista de medicamentos
+ *         description: Lista de medicamentos agrupados por status
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 tomados:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/MedicamentoStatus'
+ *
+ *                 pendentes:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/MedicamentoStatus'
+ *
+ *             example:
+ *               tomados:
+ *                 - id: medicamento123
+ *                   nome: Dipirona
+ *                   dosagem: 500mg
+ *                   categoria: Dor
+ *                   dosePorUso: 1
+ *                   frequencia: 8
+ *                   estoque: 10
+ *                   estoqueMinimo: 2
+ *                   tomado: true
+ *                   criadoEm: "2026-05-13T08:00:00.000Z"
+ *                   primeiraDoseEm: "2026-05-13T08:00:00.000Z"
+ *                   ultimoTomadoEm: "2026-05-13T16:00:00.000Z"
+ *
+ *               pendentes:
+ *                 - id: medicamento456
+ *                   nome: Losartana
+ *                   dosagem: 50mg
+ *                   categoria: Pressão
+ *                   dosePorUso: 1
+ *                   frequencia: 12
+ *                   estoque: 5
+ *                   estoqueMinimo: 1
+ *                   tomado: false
+ *                   criadoEm: "2026-05-13T08:00:00.000Z"
+ *                   primeiraDoseEm: "2026-05-13T20:00:00.000Z"
+ *                   ultimoTomadoEm: null
+ *
+ *       400:
+ *         description: Paciente não definido
+ *         content:
+ *           application/json:
+ *             example:
+ *               erro: "Paciente não definido"
+ *
+ *       401:
+ *         description: Token inválido ou não informado
+ *         content:
+ *           application/json:
+ *             example:
+ *               erro: "Token inválido"
+ *
+ *       404:
+ *         description: Usuário não encontrado
+ *         content:
+ *           application/json:
+ *             example:
+ *               erro: "Usuário não encontrado"
+ *
+ *       500:
+ *         description: Erro interno ao buscar medicamentos
+ *         content:
+ *           application/json:
+ *             example:
+ *               erro: "Erro ao buscar medicamentos"
  */
 router.get("/status", auth, async (req, res) => {
   try {
     const userDoc = await db.collection("usuarios").doc(req.user.uid).get();
 
     if (!userDoc.exists) {
-      return res.status(404).json({ erro: "Usuário não encontrado" });
+      return res.status(404).json({
+        erro: "Usuário não encontrado",
+      });
     }
 
     const user = userDoc.data();
@@ -292,8 +387,10 @@ router.get("/status", auth, async (req, res) => {
     const pacienteId =
       user.tipo === "paciente" ? req.user.uid : user.pacienteId;
 
-    if (!pacienteId) {
-      return res.status(400).json({ erro: "Paciente não definido" });
+    if (!pacienteId) { //pode acontecer do familiar não ter paciente vinculado, ou do medicamento estar sem pacienteId por algum erro
+      return res.status(400).json({
+        erro: "Paciente não definido",
+      });
     }
 
     const snapshot = await db
@@ -305,14 +402,33 @@ router.get("/status", auth, async (req, res) => {
     const pendentes = [];
 
     snapshot.forEach((doc) => {
-      const data = { id: doc.id, ...doc.data() };
+      const med = doc.data();
+
+      const data = { //conversão de datas para string ISO (caso sejam objetos Timestamp do Firestore)
+        id: doc.id,
+
+        ...med,
+
+        criadoEm: med.criadoEm?.toDate?.().toISOString() ?? null,
+
+        primeiraDoseEm: med.primeiraDoseEm?.toDate?.().toISOString() ?? null,
+
+        ultimoTomadoEm: med.ultimoTomadoEm?.toDate?.().toISOString() ?? null,
+      };
+
       data.tomado ? tomados.push(data) : pendentes.push(data);
     });
 
-    return res.json({ tomados, pendentes });
+    return res.json({
+      tomados,
+      pendentes,
+    });
   } catch (err) {
     console.log(err);
-    return res.status(500).json({ erro: "Erro ao buscar medicamentos" });
+
+    return res.status(500).json({
+      erro: "Erro ao buscar medicamentos",
+    });
   }
 });
 
