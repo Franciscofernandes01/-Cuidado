@@ -528,6 +528,114 @@ router.get("/paciente/status", auth, async (req, res) => {
 
 /**
  * @swagger
+ * /auth/perfil:
+ *   get:
+ *     summary: Buscar perfil do usuário autenticado
+ *     description: |
+ *       Retorna os dados do usuário autenticado com base
+ *       no token JWT/Firebase enviado no Authorization Bearer.
+ *
+ *       Essa rota é utilizada principalmente para:
+ *       - identificar o tipo do usuário;
+ *       - restaurar sessão após reinstalação do app;
+ *       - controlar fluxo do frontend;
+ *       - validar permissões;
+ *       - recuperar dados básicos do perfil.
+ *
+ *       O tipo retornado define permanentemente o perfil da conta:
+ *       - paciente
+ *       - familiar
+ *
+ *       Caso o usuário queira utilizar outro tipo,
+ *       deverá acessar com outro e-mail.
+ *
+ *     tags:
+ *       - Autenticação
+ *
+ *     security:
+ *       - bearerAuth: []
+ *
+ *     responses:
+ *       200:
+ *         description: Perfil retornado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 uid:
+ *                   type: string
+ *                   example: "uid_123456"
+ *
+ *                 nome:
+ *                   type: string
+ *                   example: "Maria da Silva"
+ *
+ *                 email:
+ *                   type: string
+ *                   format: email
+ *                   example: "maria@gmail.com"
+ *
+ *                 tipo:
+ *                   type: string
+ *                   enum:
+ *                     - paciente
+ *                     - familiar
+ *                   example: "paciente"
+ *
+ *                 telefone:
+ *                   type: string
+ *                   nullable: true
+ *                   description: Telefone no padrão internacional E.164
+ *                   example: "+5584999999999"
+ *
+ *       401:
+ *         description: Token inválido ou não informado
+ *         content:
+ *           application/json:
+ *             example:
+ *               erro: "Token inválido"
+ *
+ *       404:
+ *         description: Usuário não encontrado
+ *         content:
+ *           application/json:
+ *             example:
+ *               erro: "Usuário não encontrado"
+ *
+ *       500:
+ *         description: Erro interno ao buscar perfil
+ *         content:
+ *           application/json:
+ *             example:
+ *               erro: "Erro ao buscar perfil"
+ */
+router.get("/perfil", auth, async (req, res) => {
+
+  const userDoc = await db // busca os dados do usuário autenticado para retornar nome, email, tipo e telefone
+    .collection("usuarios")
+    .doc(req.user.uid)
+    .get()
+
+  if (!userDoc.exists) {
+    return res.status(404).json({
+      erro: "Usuário não encontrado"
+    })
+  }
+
+  const user = userDoc.data()
+
+  return res.json({
+    uid: req.user.uid,
+    nome: user.nome,
+    email: user.email,
+    tipo: user.tipo,
+    telefone: user.telefone ?? null
+  })
+})
+
+/**
+ * @swagger
  * /auth/vincularUid:
  *   post:
  *     summary: Vincula um familiar a um paciente via ID

@@ -426,6 +426,7 @@ router.post(
  *                   - hora
  *                   - atrasado
  *                   - critico
+ *                   - estoque 
  *                 example: atrasado
  *     responses:
  *       200:
@@ -527,6 +528,14 @@ router.post(
 
         type = "medicine_critical"
 
+      } else if (tipo === "estoque") {
+        titulo = "Estoque baixo"
+
+        mensagem =
+          `O estoque de ${med.nome} está baixo`
+
+        type = "low_stock"
+
       } else {
 
         return res.status(400).json({
@@ -568,7 +577,7 @@ router.post(
               }
             }
           })
-
+      console.log(`Notificação ${type} enviada para token:`, token)
         } catch (err) {
 
           console.log("Erro token:", err.code)
@@ -578,7 +587,8 @@ router.post(
       return res.json({
         mensagem: "Notificação enviada",
         tipo,
-        medicamento: med.nome
+        medicamento: med.nome,
+        enviados: tokens.length // tokens para os quais a notificação foi tentada de ser enviada
       })
 
     } catch (err) {
