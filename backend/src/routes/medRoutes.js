@@ -141,7 +141,7 @@ const medicamentoService = require("../services/medicamentoService");
  *
  *               camposObrigatorios:
  *                 value:
- *                   erro: Campos obrigatórios: nome, dosagem, dosePorUso, frequencia,primeiraDoseEm, categoria, estoque, estoque minimo, observacao
+ *                   erro: "Campos obrigatórios: nome, dosagem, dosePorUso, frequencia,primeiraDoseEm, categoria, estoque, estoque minimo, observacao"
  *
  *               frequenciaInvalida:
  *                 value:

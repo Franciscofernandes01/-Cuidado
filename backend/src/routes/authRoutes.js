@@ -124,6 +124,141 @@ router.post("/google", async (req, res) => {
     return res.status(401).json({ erro: "Token inválido" })
   }
 })
+/**
+ * @swagger
+ * /auth/telefone:
+ *   patch:
+ *     summary: Atualiza o telefone do usuário autenticado
+ *     description: |
+ *       Atualiza o número de telefone do usuário autenticado.
+ *
+ *       O telefone é:
+ *       - normalizado automaticamente;
+ *       - salvo no padrão internacional E.164;
+ *       - armazenado no formato: +5584999999999.
+ *
+ *       Exemplos aceitos:
+ *       - 84999999999
+ *       - (84) 99999-9999
+ *       - +55 84 99999-9999
+ *       - 55 84 99999-9999
+ *
+ *     tags:
+ *       - Autenticação
+ *
+ *     security:
+ *       - bearerAuth: []
+ *
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - telefone
+ *             properties:
+ *               telefone:
+ *                 type: string
+ *                 description: Número de telefone do usuário
+ *                 example: "(84) 99999-9999"
+ *
+ *     responses:
+ *       200:
+ *         description: Telefone atualizado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 mensagem:
+ *                   type: string
+ *                   example: "Telefone atualizado com sucesso"
+ *
+ *                 telefone:
+ *                   type: string
+ *                   description: Telefone formatado no padrão E.164
+ *                   example: "+5584999999999"
+ *
+ *       400:
+ *         description: Erro de validação
+ *         content:
+ *           application/json:
+ *             examples:
+ *
+ *               telefoneObrigatorio:
+ *                 summary: Telefone não informado
+ *                 value:
+ *                   erro: "Telefone é obrigatório"
+ *
+ *               telefoneInvalido:
+ *                 summary: Telefone inválido
+ *                 value:
+ *                   erro: "Telefone inválido"
+ *
+ *       401:
+ *         description: Token inválido ou não informado
+ *         content:
+ *           application/json:
+ *             example:
+ *               erro: "Token inválido"
+ *
+ *       500:
+ *         description: Erro interno ao atualizar telefone
+ *         content:
+ *           application/json:
+ *             example:
+ *               erro: "Erro ao atualizar telefone"
+ */
+router.patch("/telefone", auth, async (req, res) => {
+  try {
+
+    let { telefone } = req.body
+
+    if (!telefone) {
+      return res.status(400).json({
+        erro: "Telefone é obrigatório"
+      })
+    }
+
+    // remove tudo que não for número
+    telefone = telefone.replace(/\D/g, "")
+
+    // adiciona 55 automaticamente
+    if (!telefone.startsWith("55")) {
+      telefone = `55${telefone}`
+    }
+
+    // valida brasil
+    if (telefone.length < 12 || telefone.length > 13) {
+      return res.status(400).json({
+        erro: "Telefone inválido"
+      })
+    }
+
+    // formato final E.164
+    const telefoneFormatado = `+${telefone}`
+
+    await db.collection("usuarios")
+      .doc(req.user.uid)
+      .update({
+        telefone: telefoneFormatado
+      })
+
+    return res.json({
+      mensagem: "Telefone atualizado com sucesso",
+      telefone: telefoneFormatado
+    })
+
+  } catch (err) {
+
+    console.log(err)
+
+    return res.status(500).json({
+      erro: "Erro ao atualizar telefone"
+    })
+  }
+})
 
 /**
  * @swagger
@@ -199,13 +334,27 @@ router.patch("/status", auth, async (req, res) => {
  * /auth/paciente/status:
  *   get:
  *     summary: Retorna o status atual do paciente
- *     description: |
- *       Retorna informações do paciente vinculado ou do próprio paciente,
- *       incluindo status online, bateria e último acesso.
+ *     description: >
+ *       Retorna informações de status do paciente vinculado ao usuário autenticado.
+ *       
+ *       Se o usuário autenticado for:
+ *       - paciente: retorna o próprio status;
+ *       - familiar: retorna o status do paciente vinculado.
+ *
+ *       A rota também retorna:
+ *       - telefone do paciente;
+ *       - nome do cuidador vinculado;
+ *       - telefone do cuidador vinculado;
+ *       - status online/offline;
+ *       - bateria;
+ *       - último acesso.
+ *
  *     tags:
- *       - Status
+ *       - Paciente
+ *
  *     security:
  *       - bearerAuth: []
+ *
  *     responses:
  *       200:
  *         description: Status do paciente retornado com sucesso
@@ -214,21 +363,53 @@ router.patch("/status", auth, async (req, res) => {
  *             schema:
  *               type: object
  *               properties:
+ *
  *                 nome:
  *                   type: string
- *                   example: João Silva
+ *                   example: "Maria da Silva"
+ *
  *                 online:
  *                   type: boolean
  *                   example: true
- *                 bateria:
- *                   type: number
+ *
+ *                 telefone:
+ *                   type: string
  *                   nullable: true
- *                   example: 78
+ *                   description: Telefone do paciente no padrão E.164
+ *                   example: "+5584999999999"
+ *
+ *                 bateria:
+ *                   type: integer
+ *                   nullable: true
+ *                   example: 82
+ *
+ *                 familiarId:
+ *                   type: string
+ *                   nullable: true
+ *                   example: "uid_familiar_123"
+ *
+ *                 familiarNome:
+ *                   type: string
+ *                   nullable: true
+ *                   example: "João da Silva"
+ *
+ *                 familiarTelefone:
+ *                   type: string
+ *                   nullable: true
+ *                   description: Telefone do cuidador no padrão E.164
+ *                   example: "+5584988888888"
+ *
+ *                 fcmToken:
+ *                   type: string
+ *                   nullable: true
+ *                   example: "fcm_token_aqui"
+ *
  *                 ultimoOnline:
  *                   type: string
  *                   format: date-time
  *                   nullable: true
- *                   example: "2026-05-09T18:30:00.000Z"
+ *                   example: "2026-05-12T22:00:00.000Z"
+ *
  *                 tempoOffline:
  *                   type: string
  *                   nullable: true
@@ -241,12 +422,10 @@ router.patch("/status", auth, async (req, res) => {
  *             schema:
  *               type: object
  *               properties:
+ *
  *                 erro:
  *                   type: string
- *                   example: Paciente não vinculado
- *
- *       401:
- *         description: Token inválido ou ausente
+ *                   example: "Paciente não vinculado"
  *
  *       404:
  *         description: Paciente não encontrado
@@ -255,59 +434,95 @@ router.patch("/status", auth, async (req, res) => {
  *             schema:
  *               type: object
  *               properties:
+ *
  *                 erro:
  *                   type: string
- *                   example: Paciente não encontrado
+ *                   example: "Paciente não encontrado"
  *
- *       500:
- *         description: Erro interno do servidor
+ *       401:
+ *         description: Token inválido ou ausente
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               properties:
+ *
  *                 erro:
  *                   type: string
- *                   example: Erro ao buscar status
+ *                   example: "Token inválido"
+ *
+ *       500:
+ *         description: Erro interno ao buscar status
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *
+ *                 erro:
+ *                   type: string
+ *                   example: "Erro ao buscar status"
  */
 // ================= STATUS PACIENTE =================
 router.get("/paciente/status", auth, async (req, res) => {
   try {
-    const userDoc = await db.collection("usuarios").doc(req.user.uid).get()
-    const user = userDoc.data()
+    const userDoc = await db.collection("usuarios").doc(req.user.uid).get(); // busca usuário autenticado
+    const user = userDoc.data();
 
     const pacienteId =
-      user.tipo === "paciente"
-        ? req.user.uid
-        : user.pacienteId
+      user.tipo === "paciente" ? req.user.uid : user.pacienteId;
 
     if (!pacienteId) {
-      return res.status(400).json({ erro: "Paciente não vinculado" })
+      return res.status(400).json({ erro: "Paciente não vinculado" });
     }
 
-    const pacienteDoc = await db.collection("usuarios").doc(pacienteId).get()
+    const pacienteDoc = await db.collection("usuarios").doc(pacienteId).get();
 
     if (!pacienteDoc.exists) {
-      return res.status(404).json({ erro: "Paciente não encontrado" })
+      return res.status(404).json({ erro: "Paciente não encontrado" });
     }
 
-    const paciente = pacienteDoc.data()
+    const paciente = pacienteDoc.data();
 
-    const ultimo = paciente.ultimoOnline?.toDate?.()
-    const agora = new Date()
+    // busca familiar vinculado
+    let familiarNome = null;
+    let familiarTelefone = null;
 
-    const online = ultimo && (agora - ultimo) < 2 * 60 * 1000
+
+    if (paciente.familiarId) {
+      const familiarDoc = await db
+        .collection("usuarios")
+        .doc(paciente.familiarId)
+        .get();
+
+      if (familiarDoc.exists) {
+        familiarNome = familiarDoc.data().nome ?? null;
+
+        familiarTelefone = familiarDoc.data().telefone ?? null;
+      }
+    }
+    
+
+    const ultimo = paciente.ultimoOnline?.toDate?.();
+    const agora = new Date();
+
+    const online = ultimo && agora - ultimo < 2 * 60 * 1000;
 
     return res.json({
       nome: paciente.nome,
       online,
+      telefone: paciente.telefone ?? null,
       bateria: paciente.bateria ?? null,
+      familiarId: paciente.familiarId ?? null, // para o app do paciente, pode ser útil saber se o cuidador está vinculado ou não
+      familiarNome, // para o paciente, mostrar o nome do cuidador vinculado
+      familiarTelefone, // para o paciente, mostrar o telefone do cuidador vinculado
+      fcmToken: paciente.fcmToken ?? null, //fcmtoken do paciente, para enviar notificações mesmo quando o cuidador estiver offline
       ultimoOnline: ultimo,
-      tempoOffline: online ? null : tempoRelativo(ultimo)
-    })
-
+      tempoOffline: online ? null : tempoRelativo(ultimo),
+    });
   } catch (err) {
-    return res.status(500).json({ erro: "Erro ao buscar status" })
+    console.log(err);
+    return res.status(500).json({ erro: "Erro ao buscar status" });
   }
 })
 
