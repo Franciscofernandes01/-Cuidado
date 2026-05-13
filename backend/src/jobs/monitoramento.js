@@ -349,20 +349,98 @@ if (process.env.NODE_ENV !== "test") {
           // ================= ESTOQUE =================
 
           if ((med.estoque ?? 0) <= (med.estoqueMinimo ?? 0)) {
+            // evita spam diário
             if (med.alertaEstoqueEnviado !== hoje) {
               console.log(`Estoque baixo: ${med.nome}`);
 
+              // remove tokens duplicados
+              tokens = [...new Set(tokens)];
+
               for (const token of tokens) {
-                await enviarNotificacao(
-                  token,
-                  "Estoque baixo!",
-                  `O medicamento ${med.nome} está acabando`,
-                );
+                try {
+                  console.log("Enviando alerta estoque para:", token);
+
+                  await admin.messaging().send({
+                    token,
+
+                    notification: {
+                      title: "Estoque baixo!",
+
+                      body: `O medicamento ${med.nome} está acabando`,
+                    },
+
+                    data: {
+                      type: "low_stock",
+
+                      medicineName: med.nome,
+
+                      medicineDose: med.dosagem ?? "",
+
+                      title: "Estoque baixo!",
+
+                      body: `O medicamento ${med.nome} está acabando`,
+                    },
+
+                    android: {
+                      priority: "high",
+                    },
+
+                    apns: {
+                      payload: {
+                        aps: {
+                          contentAvailable: true,
+
+                          sound: "default",
+
+                          badge: 1,
+                        },
+                      },
+                    },
+                  });
+                } catch (err) {
+                  console.log("Erro ao enviar alerta estoque:", err.code);
+
+                  // token inválido/removido
+                  if (
+                    err.code === "messaging/registration-token-not-registered"
+                  ) {
+                    console.log("Token inválido removido");
+
+                    // remove token do paciente
+                    if (user.fcmToken === token) {
+                      await userDoc.ref.update({
+                        fcmToken: null,
+                      });
+                    }
+
+                    // remove token do familiar
+                    if (user.familiarId) {
+                      const famRef = db
+                        .collection("usuarios")
+                        .doc(user.familiarId);
+
+                      const famDoc = await famRef.get();
+
+                      if (famDoc.exists) {
+                        const familiar = famDoc.data();
+
+                        if (familiar?.fcmToken === token) {
+                          await famRef.update({
+                            fcmToken: null,
+                          });
+                        }
+                      }
+                    }
+                  }
+                }
               }
 
+              // marca envio do dia
               await doc.ref.update({
                 alertaEstoqueEnviado: hoje,
               });
+
+              console.log(`Alerta de estoque enviado: ${med.nome}`);
             }
           }
 
