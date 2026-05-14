@@ -1,125 +1,197 @@
 # 💙 +Cuidado
 
-![Node.js](https://img.shields.io/badge/Node.js-Express-green)
-![Firebase](https://img.shields.io/badge/Firebase-Firestore-orange)
-![Swagger](https://img.shields.io/badge/API-Swagger-brightgreen)
-![Tests](https://img.shields.io/badge/Tests-Jest%20%2B%20Supertest-red)
-![Status](https://img.shields.io/badge/status-em%20desenvolvimento-blue)
-
-Sistema backend desenvolvido para auxiliar no monitoramento de pacientes, gerenciamento de medicamentos e comunicação emergencial entre pacientes e familiares/cuidadores.
-
-O projeto foi desenvolvido com foco em acessibilidade, monitoramento remoto e automação de notificações utilizando Firebase Cloud Messaging (FCM).
+<p align="center">
+  <img src="https://img.shields.io/badge/Node.js-Express-green?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/Firebase-Firestore-orange?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/API-Swagger-brightgreen?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/Tests-Jest%20%2B%20Supertest-red?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/Status-Em%20Desenvolvimento-blue?style=for-the-badge" />
+</p>
 
 ---
 
-# 📌 Objetivo do Projeto
+# 📌 Sobre o Projeto
 
-O objetivo do sistema é oferecer uma solução que permita:
+O **+Cuidado** é um sistema backend desenvolvido para auxiliar no monitoramento remoto de pacientes, gerenciamento inteligente de medicamentos e comunicação emergencial entre pacientes e familiares/cuidadores.
 
-* monitoramento remoto do paciente;
-* gerenciamento inteligente de medicamentos;
-* envio automático de notificações;
-* alertas de SOS em tempo real;
-* acompanhamento de status online/offline;
-* controle de estoque de medicamentos;
-* integração entre paciente e familiar.
+O projeto foi criado com foco em:
 
-O sistema foi pensado principalmente para idosos, pessoas em tratamento contínuo e cuidadores.
+- acessibilidade;
+- monitoramento remoto;
+- automação de notificações;
+- segurança;
+- acompanhamento em tempo real;
+- integração mobile/backend.
 
----
-
-# 🚀 Funcionalidades Principais
-
-## 👤 Autenticação
-
-* Login com Google Firebase Authentication
-* Controle de permissões
-* Middleware de autenticação
-* Diferenciação entre:
-
-  * paciente
-  * familiar/cuidador
+O sistema utiliza **Firebase Authentication**, **Cloud Firestore** e **Firebase Cloud Messaging (FCM)** para fornecer autenticação segura, armazenamento em nuvem e notificações push em tempo real.
 
 ---
 
-## 💊 Medicamentos
+# 🎯 Objetivo do Projeto
 
-* Cadastro de medicamentos
-* Controle de frequência
-* Controle de horários
-* Histórico de consumo
-* Confirmação de medicamento tomado
-* Controle automático de estoque
-* Alertas de atraso
-* Alertas de estoque baixo
+O sistema busca solucionar problemas comuns enfrentados por:
 
----
+- idosos;
+- pacientes em tratamento contínuo;
+- familiares;
+- cuidadores.
 
-## 🚨 SOS
+Permitindo:
 
-* Envio de SOS entre paciente e cuidador
-* Registro de eventos
-* Notificações push em tempo real
-* Integração com alarmes do aplicativo mobile
-
----
-
-## 📲 Notificações Push
-
-Integração com Firebase Cloud Messaging:
-
-* lembrete de medicamento;
-* medicamento atrasado;
-* estoque baixo;
-* bateria baixa;
-* paciente offline;
-* SOS emergencial.
+✅ monitoramento remoto  
+✅ gerenciamento de medicamentos  
+✅ alertas automáticos  
+✅ SOS emergencial  
+✅ controle de estoque  
+✅ notificações em tempo real  
+✅ acompanhamento online/offline  
+✅ integração entre paciente e cuidador  
 
 ---
 
-## 🔗 Vínculo entre Usuários
+# 🧠 Problema Resolvido
 
-O sistema permite vincular:
+Pacientes frequentemente enfrentam dificuldades como:
 
-* paciente ↔ cuidador
+- esquecer medicamentos;
+- perder horários;
+- não informar emergências;
+- faltar acompanhamento familiar;
+- perder controle do estoque de remédios.
 
-Utilizando:
-
-* QR Code
-* Token temporário
-* UID do Firebase
-
----
-
-# 🛠 Tecnologias Utilizadas
-
-| Tecnologia               | Função               |
-| ------------------------ | -------------------- |
-| Node.js                  | Runtime backend      |
-| Express                  | API REST             |
-| Firebase Admin SDK       | Integração Firebase  |
-| Firestore                | Banco NoSQL          |
-| Firebase Authentication  | Autenticação         |
-| Firebase Cloud Messaging | Push notifications   |
-| Swagger                  | Documentação da API  |
-| node-cron                | Rotinas automáticas  |
-| Jest                     | Testes automatizados |
-| Supertest                | Testes de API        |
-| QRCode                   | Geração de QR Code   |
+O +Cuidado centraliza essas funcionalidades em um único sistema inteligente e automatizado.
 
 ---
 
-# 🧱 Arquitetura Backend
+# 🏗️ Arquitetura do Sistema
 
-O backend foi estruturado utilizando:
+## 📡 Arquitetura Geral
 
-* rotas separadas;
-* middlewares;
-* serviços;
-* jobs automatizados;
-* integração Firebase.
+```text
+┌───────────────────┐
+│   Mobile/Web App  │
+└─────────┬─────────┘
+          │ HTTP REST API
+          ▼
+┌───────────────────┐
+│  Backend Express  │
+│     Node.js       │
+└─────────┬─────────┘
+          │
+ ┌────────┼──────────────┐
+ │        │              │
+ ▼        ▼              ▼
+Firebase  Firestore      FCM
+Auth      Database       Push Notifications
+ │
+ ▼
+Cron Jobs / Monitoramento
+```
 
-Estrutura principal:
+---
+
+# ⚙️ Principais Funcionalidades
+
+# 👤 Autenticação
+
+- Login utilizando Firebase Authentication
+- Validação JWT
+- Middleware de autenticação
+- Controle de permissões
+- Diferenciação de usuários
+
+Tipos de usuários:
+
+- paciente
+- familiar/cuidador
+
+---
+
+# 💊 Gerenciamento de Medicamentos
+
+## Funcionalidades
+
+- cadastro de medicamentos;
+- controle de horários;
+- frequência personalizada;
+- confirmação de medicamento tomado;
+- histórico de consumo;
+- controle automático de estoque;
+- alertas de atraso;
+- alertas de estoque baixo.
+
+---
+
+# 🚨 Sistema SOS
+
+O sistema permite envio de SOS emergencial entre paciente e cuidador.
+
+## Fluxo SOS
+
+```text
+Paciente → Aciona SOS
+        ↓
+Backend valida vínculo
+        ↓
+Evento salvo no Firestore
+        ↓
+FCM envia push notification
+        ↓
+Aplicativo dispara alerta
+```
+
+---
+
+# 📲 Notificações Push
+
+Integração utilizando Firebase Cloud Messaging (FCM).
+
+## Tipos de notificações
+
+| Tipo | Descrição |
+|---|---|
+| medicine | Lembrete de medicamentos |
+| delayed | Medicamento atrasado |
+| stock | Estoque baixo |
+| offline | Paciente offline |
+| battery | Bateria baixa |
+| sos | Emergência |
+
+---
+
+# 🔗 Sistema de Vínculo
+
+O sistema permite vínculo entre:
+
+- paciente ↔ cuidador
+
+## Métodos de vínculo
+
+- QR Code
+- UID Firebase
+- Token temporário
+
+---
+
+# 🛠️ Tecnologias Utilizadas
+
+| Tecnologia | Função |
+|---|---|
+| Node.js | Runtime backend |
+| Express | API REST |
+| Firebase Admin SDK | Integração Firebase |
+| Firestore | Banco NoSQL |
+| Firebase Authentication | Autenticação |
+| Firebase Cloud Messaging | Push Notifications |
+| Swagger | Documentação API |
+| node-cron | Rotinas automáticas |
+| Jest | Testes automatizados |
+| Supertest | Testes de API |
+| QRCode | Geração de QR Code |
+
+---
+
+# 📂 Estrutura do Projeto
 
 ```bash
 src/
@@ -134,13 +206,166 @@ src/
 
 ---
 
-# ⚙️ Configuração do Ambiente
+# 🔥 Estrutura Firestore
 
-## 📥 Clonar Projeto
+## 📁 usuarios
+
+```json
+{
+  "nome": "João",
+  "email": "joao@email.com",
+  "tipo": "paciente",
+  "status": "online",
+  "fcmToken": "token"
+}
+```
+
+---
+
+## 📁 medicamentos
+
+```json
+{
+  "nome": "Dipirona",
+  "dosagem": "500mg",
+  "frequencia": 8,
+  "estoque": 20,
+  "estoqueMinimo": 5,
+  "primeiraDoseEm": "2026-05-13T08:00:00"
+}
+```
+
+---
+
+## 📁 sos
+
+```json
+{
+  "patientId": "uid",
+  "createdAt": "timestamp",
+  "status": "ativo"
+}
+```
+
+---
+
+## 📁 vinculos
+
+```json
+{
+  "pacienteId": "uid",
+  "familiarId": "uid",
+  "createdAt": "timestamp"
+}
+```
+
+---
+
+# 🔐 Segurança
+
+O sistema utiliza Firebase Authentication com validação JWT.
+
+Middleware principal:
+
+```js
+admin.auth().verifyIdToken(token)
+```
+
+## Recursos de segurança
+
+- autenticação JWT;
+- controle de permissões;
+- rotas protegidas;
+- validação de vínculo;
+- autorização baseada em roles;
+- separação entre paciente e cuidador.
+
+---
+
+# 👥 Controle de Permissões
+
+## Paciente
+
+Pode:
+
+- enviar SOS;
+- gerar QR Code;
+- atualizar status;
+- receber notificações;
+- confirmar medicamento.
+
+---
+
+## Familiar
+
+Pode:
+
+- cadastrar medicamentos;
+- monitorar paciente;
+- visualizar status;
+- receber notificações;
+- acompanhar medicamentos;
+- receber SOS.
+
+---
+
+# 📜 Regras de Negócio
+
+- ambos podem enviar SOS;
+- apenas usuários vinculados podem se comunicar;
+- estoque reduz automaticamente ao confirmar medicamento;
+- alertas são enviados automaticamente após atraso;
+- QR Codes possuem validade temporária;
+- familiares só podem acessar dados do paciente vinculado.
+
+---
+
+# ⏰ Monitoramento Automático
+
+O projeto utiliza `node-cron` para automação.
+
+## Rotinas monitoradas
+
+- horários de medicamentos;
+- medicamentos atrasados;
+- estoque baixo;
+- paciente offline;
+- bateria baixa.
+
+---
+
+# 🧪 Testes Automatizados
+
+O sistema possui testes utilizando:
+
+- Jest
+- Supertest
+
+## Cobertura de testes
+
+✅ autenticação  
+✅ permissões  
+✅ SOS  
+✅ medicamentos  
+✅ token inválido  
+✅ QR Code  
+✅ estoque baixo  
+✅ monitoramento cron  
+✅ rotas protegidas  
+
+---
+
+# ▶️ Como Executar o Projeto
+
+# 📥 Clonar Projeto
 
 ```bash
 git clone https://github.com/Franciscofernandes01/-Cuidado.git
 ```
+
+---
+
+# 📂 Entrar na pasta
 
 ```bash
 cd -Cuidado/backend
@@ -148,7 +373,7 @@ cd -Cuidado/backend
 
 ---
 
-# 📦 Instalação
+# 📦 Instalar dependências
 
 ```bash
 npm install
@@ -156,26 +381,24 @@ npm install
 
 ---
 
-# 🔥 Configuração Firebase
+# 🔥 Configurar Firebase
 
-O projeto utiliza:
+O projeto necessita de:
 
-* Firebase Authentication
-* Firestore Database
-* Firebase Cloud Messaging
+- Firebase Authentication
+- Firestore
+- Firebase Cloud Messaging
 
-É necessário:
+## Passos
 
-1. Criar um projeto Firebase
-2. Gerar a Service Account
-3. Inserir o JSON da credencial
-4. Configurar o `.env`
+1. Criar projeto Firebase
+2. Gerar Service Account
+3. Baixar credencial JSON
+4. Configurar `.env`
 
 ---
 
 # 🔐 Configuração .env
-
-Exemplo:
 
 ```env
 PORT=3000
@@ -187,9 +410,7 @@ FIREBASE_PRIVATE_KEY=sua-chave
 
 ---
 
-# ▶️ Executar Projeto
-
-## Desenvolvimento
+# ▶️ Executar servidor
 
 ```bash
 npm start
@@ -203,106 +424,86 @@ http://localhost:3000
 
 ---
 
-# 🧪 Testes Automatizados
-
-O projeto possui testes automatizados utilizando:
-
-* Jest
-* Supertest
-
-### Executar testes
-
-```bash
-npm test
-```
-
----
-
-## Testes Implementados
-
-* autenticação;
-* permissões;
-* SOS;
-* medicamentos;
-* token inválido;
-* vínculo QR Code;
-* estoque baixo;
-* rotas protegidas;
-* monitoramento cron.
-
-Os testes utilizam mocks para evitar alterações no Firebase real.
-
----
-
 # 📚 Swagger
 
-A documentação da API está disponível em:
+A documentação completa da API está disponível em:
 
 ```bash
 http://localhost:3000/api-docs
 ```
 
-O Swagger documenta:
-
-* autenticação;
-* medicamentos;
-* SOS;
-* vínculos;
-* status;
-* notificações.
-
 ---
 
-# 🔒 Segurança e Autenticação
+# 📡 Principais Endpoints
 
-A autenticação é feita via Firebase Authentication.
+# 🔑 Autenticação
 
-Middleware principal:
-
-```js
-admin.auth().verifyIdToken(token)
+```http
+POST /auth/google
 ```
 
-O sistema protege:
+---
 
-* rotas privadas;
-* permissões por tipo de usuário;
-* validação de token;
-* acesso entre paciente e familiar.
+# 💊 Medicamentos
+
+## Criar medicamento
+
+```http
+POST /medicamentos
+```
+
+### Headers
+
+```http
+Authorization: Bearer TOKEN
+```
+
+### Exemplo Body
+
+```json
+{
+  "nome": "Dipirona",
+  "dosagem": "500mg",
+  "frequencia": 8,
+  "estoque": 20
+}
+```
 
 ---
 
-# 👥 Controle de Permissões
+## Confirmar medicamento
 
-## Paciente
-
-Pode:
-
-* cadastrar medicamentos;
-* enviar SOS;
-* gerar QR Code;
-* atualizar status.
-
-## Familiar
-
-Pode:
-
-* receber SOS;
-* monitorar paciente;
-* visualizar status;
-* receber notificações.
+```http
+PATCH /medicamentos/:id/tomar
+```
 
 ---
 
-# 🚨 Fluxo SOS
+# 🚨 SOS
 
-1. Usuário aciona SOS
-2. Backend valida vínculo
-3. Evento é salvo no Firestore
-4. FCM envia Data Message
-5. Aplicativo dispara alarme
+```http
+POST /auth/sos
+```
 
-Exemplo de payload:
+## Resposta
+
+```json
+{
+  "mensagem": "SOS enviado com sucesso"
+}
+```
+
+---
+
+# 📲 Firebase Cloud Messaging
+
+O sistema envia notificações utilizando:
+
+```js
+admin.messaging().send()
+```
+
+Exemplo:
 
 ```json
 {
@@ -315,156 +516,88 @@ Exemplo de payload:
 
 ---
 
-# 💊 Fluxo de Medicamentos
 
-1. Medicamento cadastrado
-2. Cron monitora horários
-3. Sistema envia lembrete
-4. Após atraso → alerta automático
-5. Usuário confirma medicamento
-6. Estoque é atualizado
+# 🚀 Diferenciais Técnicos
 
----
-
-# ⏰ Monitoramento Automático
-
-O projeto utiliza `node-cron`.
-
-Funções monitoradas:
-
-* horários de medicamentos;
-* atrasos;
-* estoque baixo;
-* paciente offline;
-* bateria baixa.
+✅ Firebase Authentication  
+✅ Firebase Cloud Messaging  
+✅ Arquitetura modular  
+✅ Controle de permissões  
+✅ Monitoramento automatizado  
+✅ QR Code de vínculo  
+✅ Push notifications em tempo real  
+✅ Testes automatizados  
+✅ Swagger/OpenAPI  
+✅ Middleware JWT  
+✅ Sistema de monitoramento remoto  
 
 ---
 
-# 📡 Firebase Cloud Messaging
+# 🧩 Desafios Técnicos Resolvidos
 
-O sistema envia notificações utilizando:
-
-```js
-admin.messaging().send()
-```
-
-Tipos de notificações:
-
-| Tipo     | Descrição        |
-| -------- | ---------------- |
-| sos      | Emergência       |
-| medicine | Medicamentos     |
-| offline  | Paciente offline |
-| bateria  | Bateria baixa    |
-
----
-
-# 📌 Exemplos de Rotas
-
-## Login Google
-
-```http
-POST /auth/google
-```
-
----
-
-## SOS
-
-```http
-POST /auth/sos
-```
-
----
-
-## Criar Medicamento
-
-```http
-POST /medicamentos
-```
-
----
-
-## Confirmar Medicamento
-
-```http
-PATCH /medicamentos/:id/tomar
-```
-
----
-
-# 📄 Exemplo JSON
-
-## Resposta SOS
-
-```json
-{
-  "mensagem": "SOS enviado com sucesso"
-}
-```
-
----
-
-## Resposta Medicamento
-
-```json
-{
-  "mensagem": "Medicamento tomado com sucesso"
-}
-```
-
----
-
-# 📈 Melhorias Futuras
-
-* dashboard web;
-* geolocalização em tempo real;
-* IA para previsão de atrasos;
-* relatórios médicos;
-* integração com smartwatch;
-* deploy em nuvem;
-* monitoramento avançado.
+- sincronização entre paciente e cuidador;
+- gerenciamento de notificações em tempo real;
+- controle seguro de permissões;
+- automação com cron jobs;
+- integração Firebase + Express;
+- controle de estoque automático;
+- monitoramento contínuo.
 
 ---
 
 # ☁️ Possível Deploy Futuro
 
-O projeto pode ser hospedado utilizando:
+O projeto pode ser hospedado em:
 
-* Render
-* Railway
-* Firebase Functions
-* AWS
-* Docker
-
----
-
-# 🎓 Pontos Fortes para Apresentação Acadêmica
-
-* integração Firebase;
-* autenticação segura;
-* notificações push;
-* cron jobs;
-* testes automatizados;
-* documentação Swagger;
-* arquitetura modular;
-* controle de permissões;
-* integração mobile/backend.
+- Render
+- Railway
+- Firebase Functions
+- AWS
+- Docker
 
 ---
 
-# 💼 Versão Resumida para Portfólio
+# 📈 Melhorias Futuras
 
-> Sistema backend para monitoramento de pacientes e gerenciamento inteligente de medicamentos, desenvolvido com Node.js, Firebase, FCM, Swagger e testes automatizados. O projeto possui autenticação segura, alertas em tempo real, controle de medicamentos, SOS emergencial e integração entre paciente e cuidador.
+- dashboard web;
+- geolocalização em tempo real;
+- IA para previsão de atrasos;
+- integração com smartwatch;
+- relatórios médicos;
+- analytics;
+- monitoramento avançado.
+
+---
+
+# 🎓 Aprendizados do Projeto
+
+Este projeto permitiu aprofundar conhecimentos em:
+
+- APIs REST;
+- Firebase;
+- autenticação JWT;
+- notificações push;
+- arquitetura backend;
+- monitoramento em tempo real;
+- controle de permissões;
+- testes automatizados;
+- integração mobile/backend.
+
+---
+
+# 💼 Resumo para Portfólio
+
+> Sistema backend para monitoramento remoto de pacientes e gerenciamento inteligente de medicamentos, desenvolvido com Node.js, Express, Firebase, Firestore, FCM, Swagger e testes automatizados. O projeto possui autenticação segura, notificações push em tempo real, SOS emergencial, controle de estoque e integração entre paciente e cuidador.
 
 ---
 
 # 👨‍💻 Autor
 
-Francisco das Chagas Fernandes de Queiroz Filho
+## Francisco das Chagas Fernandes de Queiroz Filho
 
 GitHub:
-https://github.com/Franciscofernandes01
+
+[Franciscofernandes01 GitHub](https://github.com/Franciscofernandes01?utm_source=chatgpt.com)
 
 ---
 
