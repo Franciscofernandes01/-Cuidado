@@ -1,0 +1,24 @@
+@startuml
+
+actor Paciente
+
+participant "API Express" as API
+database Firestore
+participant FCM
+actor Familiar
+
+Paciente -> API : POST /auth/sos
+
+API -> Firestore : validar vínculo
+
+Firestore --> API : vínculo válido
+
+API -> Firestore : salvar SOS
+
+API -> FCM : enviar push
+
+FCM -> Familiar : notificação SOS
+
+API --> Paciente : SOS enviado
+
+@enduml

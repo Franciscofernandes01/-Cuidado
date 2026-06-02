@@ -1,0 +1,28 @@
+@startuml
+
+actor Familiar
+
+participant API
+participant AuthMiddleware
+participant MedicamentoService
+database Firestore
+
+Familiar -> API : POST /medicamentos
+
+API -> AuthMiddleware : validar JWT
+
+AuthMiddleware --> API : autorizado
+
+API -> MedicamentoService : criarMedicamento()
+
+MedicamentoService -> MedicamentoService : gerarHorarios()
+
+MedicamentoService -> Firestore : salvar medicamento
+
+Firestore --> MedicamentoService
+
+MedicamentoService --> API
+
+API --> Familiar : 201 Created
+
+@enduml

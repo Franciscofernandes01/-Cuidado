@@ -1,0 +1,70 @@
+@startuml
+
+class Usuario {
+    +uid
+    +nome
+    +email
+    +tipo
+    +fcmToken
+    +online
+    +ultimoOnline
+    +bateria
+}
+
+class Paciente
+
+class Familiar
+
+class Medicamento {
+    +id
+    +publicId
+    +nome
+    +dosagem
+    +categoria
+    +dosePorUso
+    +frequencia
+    +estoque
+    +estoqueMinimo
+    +horarios
+    +primeiraDoseEm
+}
+
+class Vinculo {
+    +pacienteId
+    +familiarId
+    +createdAt
+}
+
+class SOS {
+    +id
+    +patientId
+    +status
+    +createdAt
+}
+
+class Notificacao {
+    +tipo
+    +titulo
+    +mensagem
+}
+
+class MedicamentoService
+class NotificationService
+class MonitoramentoJob
+
+Usuario <|-- Paciente
+Usuario <|-- Familiar
+
+Paciente "1" --> "*" Medicamento
+Paciente "1" --> "*" SOS
+
+Paciente "1" --> "*" Vinculo
+Familiar "1" --> "*" Vinculo
+
+MonitoramentoJob ..> Medicamento
+MonitoramentoJob ..> NotificationService
+
+MedicamentoService ..> Medicamento
+NotificationService ..> Notificacao
+
+@enduml

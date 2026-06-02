@@ -1,0 +1,46 @@
+@startuml
+
+participant Cron
+participant MonitoramentoJob
+database Firestore
+participant FCM
+actor Paciente
+actor Familiar
+
+Cron -> MonitoramentoJob : executarMonitoramento()
+
+MonitoramentoJob -> Firestore : buscar pacientes
+
+Firestore --> MonitoramentoJob
+
+MonitoramentoJob -> Firestore : buscar medicamentos
+
+Firestore --> MonitoramentoJob
+
+alt estoque baixo
+
+MonitoramentoJob -> FCM : alerta estoque
+
+FCM -> Paciente : push
+
+FCM -> Familiar : push
+
+end
+
+alt paciente offline
+
+MonitoramentoJob -> FCM : alerta offline
+
+FCM -> Familiar : push
+
+end
+
+alt bateria baixa
+
+MonitoramentoJob -> FCM : alerta bateria
+
+FCM -> Familiar : push
+
+end
+
+@enduml
