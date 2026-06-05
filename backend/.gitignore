@@ -34,4 +34,5 @@ coverage/
 # cache do jest
 .jest/
 
+# Service Worker do Firebase (NÃO COMMITAR)
 firebase-messaging-sw.js
