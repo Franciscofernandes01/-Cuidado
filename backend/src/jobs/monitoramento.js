@@ -281,7 +281,7 @@ async function executarMonitoramento() { //
             try {
               console.log("Enviando para:", token);
 
-              await admin.messaging().send({
+              await admin.messaging().send({// envia notificação push de horário do medicamento para paciente e familiar
                 token,
 
                 notification: {

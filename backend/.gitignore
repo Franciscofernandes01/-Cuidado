@@ -33,3 +33,5 @@ coverage/
 
 # cache do jest
 .jest/
+
+firebase-messaging-sw.js
