@@ -45,7 +45,6 @@ async function executarMonitoramento() { //
 
         const ultimo = user.ultimoOnline?.toDate?.();
 
-        const agora = new Date();
 
         const tempoOffline = ultimo ? agora - ultimo : null;
 
@@ -120,7 +119,8 @@ async function executarMonitoramento() { //
                 try {
                   console.log("Enviando alerta estoque para:", token);
 
-                  await admin.messaging().send({// envia notificação push de estoque baixo para paciente e familiar
+                  await admin.messaging().send({
+                    // envia notificação push de estoque baixo para paciente e familiar
                     token,
 
                     notification: {
@@ -208,9 +208,9 @@ async function executarMonitoramento() { //
 
           if (!med.frequencia || !med.ultimoTomadoEm) continue;
 
-          const ultimo = med.ultimoTomadoEm.toDate();// data do último registro de tomada
+          const ultimo = med.ultimoTomadoEm.toDate(); // data do último registro de tomada
 
-          const freqMs = med.frequencia * 60 * 60 * 1000;// frequência em milissegundos
+          const freqMs = med.frequencia * 60 * 60 * 1000; // frequência em milissegundos
 
           // calcula horário esperado
           let horarioDose = new Date(ultimo.getTime() + freqMs);
@@ -234,45 +234,36 @@ async function executarMonitoramento() { //
           let mensagem = "";
 
           // ================= HORA DO REMÉDIO =================
-
+          // 1. HORA DO REMÉDIO: Se já passou do horário e a primeira notificação não foi enviada
           if (
-            diff >= 0 &&
-            diff < 5 * 60 * 1000 &&
-            med.ultimoHorarioNotificado !== identificador
+            med.ultimoHorarioNotificado !== identificador &&
+            diff < 10 * 60 * 1000
           ) {
             tipoNotificacao = "medicine";
-
             titulo = "Hora do medicamento";
-
             mensagem = `Está na hora de tomar ${med.nome}`;
           }
-
-          // ================= ATRASADO 10 MIN =================
+          // 2. ATRASADO 10 MIN: Se já passou de 10 min, não foi enviado o alerta de atraso, mas ainda não deu 30 min
           else if (
             diff >= 10 * 60 * 1000 &&
             diff < 30 * 60 * 1000 &&
             med.ultimoHorarioAtrasado !== identificador
           ) {
             tipoNotificacao = "medicine";
-
             titulo = "Medicamento atrasado";
-
             mensagem = `${med.nome} está atrasado há mais de 10 minutos`;
           }
-
-          // ================= NÃO CONFIRMADO 30 MIN =================
+          // 3. NÃO CONFIRMADO 30 MIN: Se já passou de 30 min e o crítico não foi enviado
           else if (
             diff >= 30 * 60 * 1000 &&
             med.ultimoHorarioCritico !== identificador
           ) {
             tipoNotificacao = "medicine_urgent";
-
             titulo = "Medicamento não confirmado";
-
             mensagem = `${med.nome} não foi confirmado há mais de 30 minutos`;
           }
 
-          // sem notificação
+          // sem notificação (caso caia nas brechas após já ter enviado)
           if (!tipoNotificacao) continue;
 
           // ================= ENVIA PUSH =================
@@ -281,7 +272,8 @@ async function executarMonitoramento() { //
             try {
               console.log("Enviando para:", token);
 
-              await admin.messaging().send({// envia notificação push de horário do medicamento para paciente e familiar
+              await admin.messaging().send({
+                // envia notificação push de horário do medicamento para paciente e familiar
                 token,
 
                 notification: {
