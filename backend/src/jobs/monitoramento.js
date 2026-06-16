@@ -224,6 +224,16 @@ async function executarMonitoramento() { //
           // identificador único da dose
           const identificador = horarioDose.toISOString();
 
+          // verifica se esta dose já foi confirmada
+          const doseConfirmada = (med.historico || []).some(
+            (h) => h.horarioPrevisto === identificador && h.status === "tomado",
+          );
+
+          // se já tomou, não envia mais nenhum alerta
+          if (doseConfirmada) {
+            continue;
+          }
+
           // histórico
           let historicoAtualizado = [...(med.historico || [])];
 

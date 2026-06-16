@@ -1,46 +1,24 @@
 @startuml
+autonumber
+actor "Paciente / Cuidador" as User
+participant "Agendador (Cron)" as Cron
+participant "Monitoramento" as Mon
+database "Firestore" as DB
+participant "Notificação (FCM)" as FCM
 
-participant Cron
-participant MonitoramentoJob
-database Firestore
-participant FCM
-actor Paciente
-actor Familiar
+Cron -> Mon: Executa a cada minuto
+Mon -> DB: Busca pacientes e medicamentos
+DB --> Mon: Retorna dados e datas de tomada
 
-Cron -> MonitoramentoJob : executarMonitoramento()
+note over Mon: Calcula tempo da dose: \n(agora - proximaDose)
 
-MonitoramentoJob -> Firestore : buscar pacientes
-
-Firestore --> MonitoramentoJob
-
-MonitoramentoJob -> Firestore : buscar medicamentos
-
-Firestore --> MonitoramentoJob
-
-alt estoque baixo
-
-MonitoramentoJob -> FCM : alerta estoque
-
-FCM -> Paciente : push
-
-FCM -> Familiar : push
-
+alt No Horário
+    Mon -> FCM: Dispara "Hora do Remédio"
+else Atraso > 10 min
+    Mon -> FCM: Alerta "Medicamento Atrasado"
+else Crítico > 30 min
+    Mon -> FCM: Alerta Crítico "Não Confirmado"
 end
 
-alt paciente offline
-
-MonitoramentoJob -> FCM : alerta offline
-
-FCM -> Familiar : push
-
-end
-
-alt bateria baixa
-
-MonitoramentoJob -> FCM : alerta bateria
-
-FCM -> Familiar : push
-
-end
-
-@enduml
+FCM -> User: Envia Push Notification
+Mon -> DB: Grava no Histórico do medicamento
